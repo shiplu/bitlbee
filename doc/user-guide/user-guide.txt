@@ -74,6 +74,7 @@ Table of Contents
 
         otr connect
         otr disconnect
+        otr reconnect
         otr smp
         otr smpq
         otr trust
@@ -134,6 +135,7 @@ Table of Contents
     root_nick
     save_on_quit
     server
+    show_ids
     show_offline
     show_users
     simulate_netsplit
@@ -253,7 +255,7 @@ Since BitlBee uses inetd, you should add the following line to /etc/inetd.conf:
 Inetd has to be restarted after changing the configuration. Either killall -HUP
 inetd or /etc/init.d/inetd restart should do the job on most systems.
 
-You might be one of the.. ehr, lucky people running an xinetd-powered distro.
+You might be one of the.. ehr, lucky people running an xinetd-powered distro. 
 xinetd is quite different and they seem to be proud of that.. ;-) Anyway, if
 you want BitlBee to work with xinetd, just copy the bitlbee.xinetd file to your
 /etc/xinetd.d/ directory (and probably edit it to suit your needs).
@@ -354,12 +356,12 @@ Welcome to BitlBee, your IRC gateway to ICQ, MSN, AOL, Jabber, Yahoo! and
 Twitter.
 
 The center of BitlBee is the control channel, &bitlbee. Two users will always
-be there, you (where "you" is the nickname you are using) and the system user,
+be there, you (where "you" is the nickname you are using) and the system user, 
 root.
 
 You need register so that all your IM settings (passwords, contacts, etc) can
 be saved on the BitlBee server. It's important that you pick a good password so
-no one else can access your account. Register with this password using the
+no one else can access your account. Register with this password using the 
 register command: register <password> (without the brackets!).
 
 Be sure to remember your password. The next time you connect to the BitlBee
@@ -375,7 +377,7 @@ Step Two: Add and Connect To your IM Account(s).
 To add an account to the account list you will need to use the account add
 command: account add <protocol> <username> <password> [<server>].
 
-For instance, suppose you have a Jabber account at jabber.org with handle
+For instance, suppose you have a Jabber account at jabber.org with handle 
 bitlbee@jabber.org with password QuickStart, you would:
 
 < you> account add jabber bitlbee@jabber.org QuickStart
@@ -415,7 +417,7 @@ Step Four: Managing Contact Lists: Add and Remove.
 Step Four: Managing Contact Lists: Add and Remove.
 
 Now you might want to add some contacts, to do this we will use the add
-command. It needs two arguments: a connection ID (which can be a number (try
+command. It needs two arguments: a connection ID (which can be a number (try 
 account list), protocol name or (part of) the screenname) and the user's
 handle. It is used in the following way: add <connection> <handle>
 
@@ -506,6 +508,7 @@ otr - Off-the-Record encryption control
 
     otr connect
     otr disconnect
+    otr reconnect
     otr smp
     otr smpq
     otr trust
@@ -566,6 +569,7 @@ resource_select
 root_nick
 save_on_quit
 server
+show_ids
 show_offline
 show_users
 simulate_netsplit
@@ -633,7 +637,7 @@ it's able to find out the server by doing DNS SRV lookups.
 
 In previous versions it was also possible to specify port numbers and/or SSL in
 the server tag. This is deprecated and should now be done using the account set
-command. This also applies to specifying a resource in the handle (like
+command. This also applies to specifying a resource in the handle (like 
 wilmer@bitlbee.org/work).
 
 account add msn
@@ -929,8 +933,8 @@ Syntax: 
 
 otr <subcommand> [<arguments>]
 
-Available subcommands: connect, disconnect, smp, smpq, trust, info, keygen, and
-forget. See help otr <subcommand> for more information.
+Available subcommands: connect, disconnect, reconnect, smp, smpq, trust, info,
+keygen, and forget. See help otr <subcommand> for more information.
 
 otr connect
 
@@ -948,6 +952,17 @@ Syntax: 
 otr disconnect <nick>
 
 Resets the connection with the specified user to cleartext.
+
+otr reconnect
+
+Syntax: 
+
+otr reconnect <nick>
+
+Breaks and re-establishes the encrypted connection with the specified user.
+Useful if something got desynced.
+
+Equivalent to otr disconnect followed by otr connect.
 
 otr smp
 
@@ -1218,7 +1233,7 @@ BitlBee can connect to all Twitter API implementations.
 
 For example, set this setting to http://identi.ca/api to use Identi.ca.
 
-Keep two things in mind: When not using Twitter, you must also disable the
+Keep two things in mind: When not using Twitter, you must also disable the 
 oauth setting as it currently only works with Twitter. If you're still having
 issues, make sure there is no slash at the end of the URL you enter here.
 
@@ -1611,7 +1626,7 @@ to (when a buddy is online through different resources), this setting was
 added.
 
 Normally it's set to priority which means messages will always be delivered to
-the buddy's resource with the highest priority. If the setting is set to
+the buddy's resource with the highest priority. If the setting is set to 
 activity, messages will be delivered to the resource that was last used to send
 you a message (or the resource that most recently connected).
 
@@ -1639,6 +1654,14 @@ Can be set for Jabber- and OSCAR-connections. For Jabber, you might have to set
 this if the servername isn't equal to the part after the @ in the Jabber
 handle. For OSCAR this shouldn't be necessary anymore in recent BitlBee
 versions.
+
+show_ids
+
+Type: boolean
+
+Enable this setting on a Twitter account to have BitlBee include a two-digit
+"id" in front of every message. This id can then be used for replies and
+retweets.
 
 show_offline
 
@@ -1896,7 +1919,7 @@ Syntax: 
 register [<password>]
 
 BitlBee can save your settings so you won't have to enter all your IM passwords
-every time you log in. If you want the Bee to save your settings, use the
+every time you log in. If you want the Bee to save your settings, use the 
 register command.
 
 Please do pick a secure password, don't just use your nick as your password.
@@ -2339,7 +2362,7 @@ See help nick_format2 for some more information.
 Nickname formatting - modifiers
 
 Two modifiers are currently available: You can include only the first few
-characters of a variable by putting a number right after the %. For example,
+characters of a variable by putting a number right after the %. For example, 
 [%3group]%-@nick will include only the first three characters of the group name
 in the nick.
 
@@ -2376,7 +2399,7 @@ messages, and many strange issues caused by Microsoft breaking old-protocol
 compatibility should now be resolved.
 
 Twitter extended: IRC-style replies ("BitlBee:") now get converted to proper
-Twitter replies ("@BitlBee") and get a reference to the original message (see
+Twitter replies ("@BitlBee") and get a reference to the original message (see 
 help set auto_reply_timeout). Retweets and some other stuff is also supported
 now (see help set commands).
 

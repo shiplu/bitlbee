@@ -28,8 +28,8 @@
 #include "nogaim.h"
 #include "twitter_http.h"
 
-#define TWITTER_API_URL "http://twitter.com"
-#define IDENTICA_API_URL "http://identi.ca/api"
+#define TWITTER_API_URL "http://api.twitter.com/1"
+#define IDENTICA_API_URL "https://identi.ca/api"
 
 /* Status URLs */
 #define TWITTER_STATUS_UPDATE_URL "/statuses/update.xml"
@@ -46,9 +46,7 @@
 #define TWITTER_USER_TIMELINE_URL "/statuses/user_timeline.xml"
 
 /* Users URLs */
-#define TWITTER_SHOW_USERS_URL "/users/show.xml"
-#define TWITTER_SHOW_FRIENDS_URL "/statuses/friends.xml"
-#define TWITTER_SHOW_FOLLOWERS_URL "/statuses/followers.xml"
+#define TWITTER_USERS_LOOKUP_URL "/users/lookup.xml"
 
 /* Direct messages URLs */
 #define TWITTER_DIRECT_MESSAGES_URL "/direct_messages.xml"

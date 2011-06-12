@@ -26,18 +26,18 @@ endif
 # Expansion of variables
 subdirobjs = $(foreach dir,$(subdirs),$(dir)/$(dir).o)
 
-all: $(OUTFILE) $(OTR_PI)
+all: $(OUTFILE) $(OTR_PI) systemd
 	$(MAKE) -C doc
 
 uninstall: uninstall-bin uninstall-doc 
 	@echo -e '\nmake uninstall does not remove files in '$(DESTDIR)$(ETCDIR)', you can use make uninstall-etc to do that.\n'
 
-install: install-bin install-doc install-plugins
+install: install-bin install-doc install-plugins install-systemd
 	@if ! [ -d $(DESTDIR)$(CONFIG) ]; then echo -e '\nThe configuration directory $(DESTDIR)$(CONFIG) does not exist yet, don'\''t forget to create it!'; fi
 	@if ! [ -e $(DESTDIR)$(ETCDIR)/bitlbee.conf ]; then echo -e '\nNo files are installed in '$(DESTDIR)$(ETCDIR)' by make install. Run make install-etc to do that.'; fi
 	@echo
 
-.PHONY:   install   install-bin   install-etc   install-doc install-plugins \
+.PHONY:   install   install-bin   install-etc   install-doc install-plugins install-systemd \
         uninstall uninstall-bin uninstall-etc uninstall-doc \
         all clean distclean tar $(subdirs)
 
@@ -47,7 +47,7 @@ Makefile.settings:
 	@echo
 
 clean: $(subdirs)
-	rm -f *.o $(OUTFILE) core utils/bitlbeed
+	rm -f *.o $(OUTFILE) core utils/bitlbeed init/bitlbee*.service
 	$(MAKE) -C tests clean
 
 distclean: clean $(subdirs)
@@ -109,6 +109,24 @@ ifdef OTR_PI
 	install -m 0755 otr.so $(DESTDIR)$(PLUGINDIR)
 endif
 
+systemd:
+ifdef SYSTEMDSYSTEMUNITDIR
+	sed 's|@sbindir@|$(BINDIR)|' init/bitlbee.service.in > init/bitlbee.service
+	sed 's|@sbindir@|$(BINDIR)|' init/bitlbee@.service.in > init/bitlbee@.service
+endif
+
+install-systemd:
+ifdef SYSTEMDSYSTEMUNITDIR
+ifeq ($(shell id -u),0)
+	mkdir -p $(DESTDIR)$(SYSTEMDSYSTEMUNITDIR)
+	install -m 0644 init/bitlbee.service $(DESTDIR)$(SYSTEMDSYSTEMUNITDIR)
+	install -m 0644 init/bitlbee@.service $(DESTDIR)$(SYSTEMDSYSTEMUNITDIR)
+	install -m 0644 init/bitlbee.socket $(DESTDIR)$(SYSTEMDSYSTEMUNITDIR)
+else
+	@echo Not root, so not installing systemd files.
+endif
+endif
+
 tar:
 	fakeroot debian/rules clean || make distclean
 	x=$$(basename $$(pwd)); \
@@ -120,7 +138,7 @@ $(subdirs):
 
 $(OTR_PI): %.so: $(SRCDIR)%.c
 	@echo '*' Building plugin $@
-	@$(CC) $(CFLAGS) $(OTRFLAGS) -fPIC -shared $< -o $@
+	@$(CC) $(CFLAGS) $(OTRFLAGS) -fPIC -shared $(LDFLAGS) $< -o $@
 
 $(objects): %.o: $(SRCDIR)%.c
 	@echo '*' Compiling $<
