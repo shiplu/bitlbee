@@ -36,6 +36,7 @@ gcov=0
 plugins=1
 otr=0
 skype=0
+torchat=0
 
 events=glib
 ldap=0
@@ -85,6 +86,8 @@ Option		Description				Default
 		Disable/enable OTR encryption support	$otr
 --skype=0/1/plugin
 		Disable/enable Skype support		$skype
+--torchat=0/1/plugin
+		Disable/enable TorChat support		$torchat
 
 --events=...	Event handler (glib, libevent)		$events
 --ssl=...	SSL library to use (gnutls, nss, openssl, bogus, auto)
@@ -562,6 +565,11 @@ fi
 if [ "$skype" = "1" -o "$skype" = "plugin" ]; then
 	echo 'SKYPE_PI=skype.so' >> Makefile.settings
 	protocols_mods="$protocol_mods skype(plugin)"
+fi
+
+if [ "$torchat" = "1" -o "$torchat" = "plugin" ]; then
+	echo 'TORCHAT_PI=torchat.so' >> Makefile.settings
+	protocols_mods="$protocol_mods torchat(plugin)"
 fi
 
 if [ ! -e doc/user-guide/help.txt ] && ! type xmlto > /dev/null 2> /dev/null; then

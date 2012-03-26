@@ -26,7 +26,7 @@ endif
 # Expansion of variables
 subdirobjs = $(foreach dir,$(subdirs),$(dir)/$(dir).o)
 
-all: $(OUTFILE) $(OTR_PI) $(SKYPE_PI) doc systemd
+all: $(OUTFILE) $(OTR_PI) $(SKYPE_PI) $(TORCHAT_PI) doc systemd
 ifdef SKYPE_PI
 	$(MAKE) -C protocols/skype doc
 endif
@@ -114,7 +114,7 @@ uninstall-etc:
 	rm -f $(DESTDIR)$(ETCDIR)/bitlbee.conf
 	-rmdir $(DESTDIR)$(ETCDIR)
 
-install-plugins: install-plugin-otr install-plugin-skype
+install-plugins: install-plugin-otr install-plugin-skype install-plugin-torchat
 
 install-plugin-otr:
 ifdef OTR_PI
@@ -131,6 +131,11 @@ ifdef SKYPE_PI
 	install -m 0644 $(_SRCDIR_)protocols/skype/skyped.conf.dist $(DESTDIR)$(ETCDIR)/../skyped/skyped.conf
 	install -m 0755 $(_SRCDIR_)protocols/skype/skyped.py $(DESTDIR)$(BINDIR)/skyped
 	make -C protocols/skype install-doc
+endif
+
+install-plugin-torchat:
+ifdef TORCHAT_PI
+	install -m 0755 torchat.so $(DESTDIR)$(PLUGINDIR)
 endif
 
 systemd:
@@ -166,6 +171,10 @@ $(OTR_PI): %.so: $(_SRCDIR_)%.c
 
 $(SKYPE_PI): $(_SRCDIR_)protocols/skype/skype.c
 	@echo '*' Building plugin skype
+	@$(CC) $(CFLAGS) -fPIC -shared $< -o $@
+
+$(TORCHAT_PI): $(_SRCDIR_)protocols/torchat/torchat.c $(_SRCDIR_)protocols/torchat/torchat_socks.c
+	@echo '*' Building plugin torchat
 	@$(CC) $(CFLAGS) -fPIC -shared $< -o $@
 
 $(objects): %.o: $(_SRCDIR_)%.c
