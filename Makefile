@@ -173,7 +173,7 @@ $(SKYPE_PI): $(_SRCDIR_)protocols/skype/skype.c
 	@echo '*' Building plugin skype
 	@$(CC) $(CFLAGS) -fPIC -shared $< -o $@
 
-$(TORCHAT_PI): $(_SRCDIR_)protocols/torchat/torchat.c $(_SRCDIR_)protocols/torchat/torchat_socks.c
+$(TORCHAT_PI): $(_SRCDIR_)protocols/torchat/torchat.c
 	@echo '*' Building plugin torchat
 	@$(CC) $(CFLAGS) -fPIC -shared $< -o $@
 
