@@ -136,7 +136,10 @@ static void torchat_parse_disconnected(struct im_connection *ic, char* address, 
 
 static void torchat_parse_status(struct im_connection *ic, char* address, char* line)
 {
-	imcb_buddy_status(ic, address, BEE_USER_ONLINE, NULL, NULL);
+	if (!strcmp(line, "available"))
+		imcb_buddy_status(ic, address, BEE_USER_ONLINE, NULL, NULL);
+	else if (!strcmp(line, "away") || !strcmp(line, "xa"))
+		imcb_buddy_status(ic, address, BEE_USER_ONLINE | BEE_USER_AWAY, NULL, NULL);
 }
 
 static void torchat_parse_client_name(struct im_connection *ic, char* address, char* line)
@@ -165,12 +168,18 @@ static void torchat_parse_client_version(struct im_connection *ic, char* address
 
 static void torchat_parse_name(struct im_connection *ic, char* address, char* line)
 {
-
+	if (strlen(line) > 0)
+		imcb_rename_buddy(ic, address, line);
+	else
+		imcb_rename_buddy(ic, address, NULL);
 }
 
 static void torchat_parse_description(struct im_connection *ic, char* address, char* line)
 {
-
+	if (strlen(line) > 0)
+		imcb_buddy_status_msg(ic, address, line);
+	else
+		imcb_buddy_status_msg(ic, address, NULL);
 }
 
 static void torchat_parse_list(struct im_connection *ic, char* address, char* line)
@@ -265,15 +274,21 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	return TRUE;
 }
 
-static void torchat_buddy_data_add( bee_user_t *bu )
+static void torchat_buddy_data_add(bee_user_t *bu)
 {
 	bu->data = g_new0(struct torchat_buddy_data, 1);
 }
 
-static void torchat_buddy_data_free( bee_user_t *bu )
+static void torchat_buddy_data_free(bee_user_t *bu)
 {
 	struct torchat_buddy_data *bd = bu->data;
 	
+	if (bd->client.name)
+		g_free(bd->client.name);
+
+	if (bd->client.version)
+		g_free(bd->client.version);
+
 	g_free(bd);
 }
 
@@ -281,7 +296,7 @@ static void *torchat_buddy_action(struct bee_user *bu, const char *action, char 
 {
 	struct torchat_buddy_data *bd = bu->data;
 
-	if (!strcmp(action, "VERSION")) {
+	if (!strcmp(action, "VERSION") && bd->client.name) {
 		char *tmp = g_strdup_printf("%s %s", bd->client.name, bd->client.version);
 		char * const argv[] = { tmp, NULL };
 
