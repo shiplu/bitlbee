@@ -175,7 +175,7 @@ $(SKYPE_PI): $(_SRCDIR_)protocols/skype/skype.c
 
 $(TORCHAT_PI): $(_SRCDIR_)protocols/torchat/torchat.c
 	@echo '*' Building plugin torchat
-	@$(CC) $(CFLAGS) -fPIC -shared $< -o $@ $(LDFLAGS)
+	@$(CC) $(CFLAGS) -fPIC -shared $(LDFLAGS) $< -o $@ 
 
 $(objects): %.o: $(_SRCDIR_)%.c
 	@echo '*' Compiling $<

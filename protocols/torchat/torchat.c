@@ -34,7 +34,6 @@
 #define TORCHAT_DEFAULT_SERVER "localhost"
 #define TORCHAT_DEFAULT_PORT   "11110"
 
-#define IRC_LINE_SIZE 1024
 #define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
 
 struct torchat_data {
@@ -52,7 +51,16 @@ struct torchat_data {
 	int filetransfer_status;
 };
 
-gboolean torchat_valid_address (char* test)
+struct torchat_buddy_data {
+	struct {
+		char *name;
+		char *version;
+	} client;
+};
+
+typedef void (*torchat_parser)(struct im_connection *ic, char* address, char *line);
+
+static gboolean torchat_valid_address (char* test)
 {
 	size_t length = strlen(test);
 	size_t i;
@@ -71,7 +79,7 @@ gboolean torchat_valid_address (char* test)
 	return TRUE;
 }
 
-int torchat_write(struct im_connection *ic, char *buf, int len)
+static int torchat_write(struct im_connection *ic, char *buf, int len)
 {
 	struct torchat_data *td = ic->proto_data;
 	struct pollfd pfd[1];
@@ -94,43 +102,65 @@ int torchat_write(struct im_connection *ic, char *buf, int len)
 	return TRUE;
 }
 
-int torchat_printf(struct im_connection *ic, char *fmt, ...)
+static int torchat_printf(struct im_connection *ic, char *fmt, ...)
 {
 	va_list args;
-	char** str;
+	char* str;
 	int st;
 
 	va_start(args, fmt);
-	g_vasprintf(str, fmt, args);
+	g_vasprintf(&str, fmt, args);
 	va_end(args);
 
-	st = torchat_write(ic, *str, strlen(*str));
+	st = torchat_write(ic, str, strlen(str));
 
-	g_free(*str);
+	g_free(str);
 
 	return st;
 }
 
-typedef void (*torchat_parser)(struct im_connection *ic, char* address, char *line);
+static void torchat_parse_authorized(struct im_connection *ic, char* address, char* line)
+{
+	imcb_connected(ic);
+}
 
 static void torchat_parse_connected(struct im_connection *ic, char* address, char* line)
 {
-
+	imcb_add_buddy(ic, address, NULL);
 }
 
 static void torchat_parse_disconnected(struct im_connection *ic, char* address, char* line)
 {
-
+	imcb_remove_buddy(ic, address, NULL);
 }
 
 static void torchat_parse_status(struct im_connection *ic, char* address, char* line)
 {
-
+	imcb_buddy_status(ic, address, BEE_USER_ONLINE, NULL, NULL);
 }
 
-static void torchat_parse_client(struct im_connection *ic, char* address, char* line)
+static void torchat_parse_client_name(struct im_connection *ic, char* address, char* line)
 {
+	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, address);
+	struct torchat_buddy_data *bd = bu->data;
 
+	if (bd->client.name) {
+		g_free(bd->client.name);
+	}
+
+	bd->client.name = g_strdup(line);
+}
+
+static void torchat_parse_client_version(struct im_connection *ic, char* address, char* line)
+{
+	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, address);
+	struct torchat_buddy_data *bd = bu->data;
+
+	if (bd->client.version) {
+		g_free(bd->client.version);
+	}
+
+	bd->client.version = g_strdup(line);
 }
 
 static void torchat_parse_name(struct im_connection *ic, char* address, char* line)
@@ -145,63 +175,65 @@ static void torchat_parse_description(struct im_connection *ic, char* address, c
 
 static void torchat_parse_list(struct im_connection *ic, char* address, char* line)
 {
+	char **ids, **idptr, *id;
 
+	idptr = ids = g_strsplit(line, " ", 0);
+
+	while ((id = *idptr++) && strlen(id)) {
+		imcb_add_buddy(ic, id, NULL);
+
+		torchat_printf(ic, "STATUS %s\n", id);
+		torchat_printf(ic, "CLIENT %s\n", id);
+		torchat_printf(ic, "NAME %s\n", id);
+		torchat_printf(ic, "DESCRIPTION %s\n", id);
+	}
+
+	g_strfreev(ids);
+}
+
+static void torchat_parse_message(struct im_connection *ic, char* address, char* line)
+{
+	imcb_buddy_msg(ic, address, line, 0, 0);
 }
 
 static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition cond)
 {
 	struct im_connection *ic = data;
 	struct torchat_data *td = ic->proto_data;
-	char* buf = NULL;
+	char buf[1024];
 	int st, i, times = 1, current = 0;
 	char **lines, **lineptr, *line, *tmp, *address;
 	static struct parse_map {
 		char *k;
 		torchat_parser v;
 	} parsers[] = {
+		{ "AUTHORIZED", torchat_parse_authorized },
 		{ "CONNECTED", torchat_parse_connected },
 		{ "DISCONNECTED", torchat_parse_disconnected },
 		{ "STATUS", torchat_parse_status },
-		{ "CLIENT", torchat_parse_client },
+		{ "CLIENT_NAME", torchat_parse_client_name },
+		{ "CLIENT_VERSION", torchat_parse_client_version },
 		{ "NAME", torchat_parse_name },
 		{ "DESCRIPTION", torchat_parse_description },
-		{ "LIST", torchat_parse_list }
+		{ "LIST", torchat_parse_list },
+		{ "MESSAGE", torchat_parse_message }
 	};
 
 	if (!td || td->fd == -1)
 		return FALSE;
 
-	buf = g_realloc(buf, times * 512);
-
 	/* Read the whole data. */
 	st = ssl_read(td->ssl, buf, sizeof(buf));
 	if (st > 0) {
-		current += st;
-		buf[current] = '\0';
-
-		do {
-			buf = g_realloc(buf, times * 512);
-			times++;
-
-			st = ssl_read(td->ssl, buf + current, times * 512 - current);
-
-			if (st < 0 && !sockerr_again()) {
-				goto error;
-			}
-
-			current += st;
-			buf[current] = '\0';
-		} while (st > 0);
+		buf[st] = '\0';
 
 		/* Then split it up to lines. */
-		lines = g_strsplit(buf, "\n", 0);
-		lineptr = lines;
+		lineptr = lines = g_strsplit(buf, "\n", 0);
 
-		while ((line = *lineptr)) {
-			if (!strlen(line))
-				break;
+		while ((line = *lineptr++) && strlen(line)) {
+			tmp = NULL;
 
-			if (torchat_valid_address(tmp = g_strndup(line, strchr(line, ' ') - line))) {
+			if (strchr(line, ' ') && torchat_valid_address(tmp = g_strndup(line, strchr(line, ' ') - line))) {
 				address = tmp;
 				line    = line + strlen(address) + 1;
 			} else {
@@ -210,36 +242,69 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 
 			for (i = 0; i < ARRAY_SIZE(parsers); i++) {
 				if (!strncmp(line, parsers[i].k, strlen(parsers[i].k))) {
-					parsers[i].v(ic, address, line);
+					parsers[i].v(ic, address, line + strlen(parsers[i].k) + 1);
 					break;
 				}
 			}
 
-			g_free(tmp);
-
-			lineptr++;
+			if (tmp)
+				g_free(tmp);
 		}
 
 		g_strfreev(lines);
 	} else if (st == 0 || (st < 0 && !sockerr_again())) {
-		goto error;
+		closesocket(td->fd);
+		td->fd = -1;
+
+		imcb_error(ic, "Error while reading from server");
+		imc_logout(ic, TRUE);
+
+		return FALSE;
 	}
 
-end:
-	g_free(buf);
-
 	return TRUE;
+}
 
-error:
-	g_free(buf);
+static void torchat_buddy_data_add( bee_user_t *bu )
+{
+	bu->data = g_new0(struct torchat_buddy_data, 1);
+}
 
-	closesocket(td->fd);
-	td->fd = -1;
+static void torchat_buddy_data_free( bee_user_t *bu )
+{
+	struct torchat_buddy_data *bd = bu->data;
+	
+	g_free(bd);
+}
 
-	imcb_error(ic, "Error while reading from server");
-	imc_logout(ic, TRUE);
+static void *torchat_buddy_action(struct bee_user *bu, const char *action, char * const args[], void *data)
+{
+	struct torchat_buddy_data *bd = bu->data;
 
-	return FALSE;
+	if (!strcmp(action, "VERSION")) {
+		char *tmp = g_strdup_printf("%s %s", bd->client.name, bd->client.version);
+		char * const argv[] = { tmp, NULL };
+
+		imcb_buddy_action_response(bu, action, argv, NULL);
+
+		g_free(tmp);
+	}
+
+	return NULL;
+}
+
+static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
+{
+	return torchat_printf(ic, "MESSAGE %s %s\n", who, message);
+}
+
+static void torchat_logout(struct im_connection *ic)
+{
+	struct torchat_data *td = ic->proto_data;
+
+	g_free(td);
+
+	ic->proto_data = NULL;
 }
 
 static gboolean torchat_start_stream(struct im_connection *ic)
@@ -253,6 +318,7 @@ static gboolean torchat_start_stream(struct im_connection *ic)
 	if (td->bfd <= 0)
 		td->bfd = b_input_add(td->fd, B_EV_IO_READ, torchat_read_callback, ic);
 
+	st = torchat_printf(ic, "PASS %s\n", ic->acc->pass);
 	st = torchat_printf(ic, "LIST\n");
 
 	return st;
@@ -305,7 +371,7 @@ static char *torchat_set_display_name(set_t *set, char *value)
 	account_t *acc = set->data;
 	struct im_connection *ic = acc->ic;
 
-	torchat_printf(ic, "NAME %s", value);
+	torchat_printf(ic, "NAME %s\n", value);
 
 	return value;
 }
@@ -315,7 +381,7 @@ static char *torchat_set_description(set_t *set, char *value)
 	account_t *acc = set->data;
 	struct im_connection *ic = acc->ic;
 
-	torchat_printf(ic, "DESCRIPTION %s", value);
+	torchat_printf(ic, "DESCRIPTION %s\n", value);
 
 	return value;
 }
@@ -337,12 +403,19 @@ static void torchat_init(account_t *acc)
 	s->flags |= ACC_SET_NOSAVE | ACC_SET_ONLINE_ONLY;
 }
 
-void init_plugin()
+void init_plugin(void)
 {
 	struct prpl *ret = g_new0(struct prpl, 1);
 
 	ret->name = "torchat";
 	ret->login = torchat_login;
+	ret->init = torchat_init;
+	ret->logout = torchat_logout;
+	ret->buddy_msg = torchat_buddy_msg;
+	ret->handle_cmp = g_strcasecmp;
+	ret->buddy_action = torchat_buddy_action;
+	ret->buddy_data_add = torchat_buddy_data_add;
+	ret->buddy_data_free = torchat_buddy_data_free;
 
 	register_protocol(ret);
 }
