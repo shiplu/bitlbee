@@ -148,6 +148,8 @@ static void torchat_parse_status(struct im_connection *ic, char *address, char* 
 		imcb_buddy_status(ic, address, BEE_USER_ONLINE, NULL, NULL);
 	else if (!strcmp(line, "away") || !strcmp(line, "xa"))
 		imcb_buddy_status(ic, address, BEE_USER_ONLINE | BEE_USER_AWAY, NULL, NULL);
+	else if (!strcmp(line, "offline"))
+		imcb_buddy_status(ic, address, 0, NULL, NULL);
 }
 
 static void torchat_parse_client_name(struct im_connection *ic, char *address, char* line)
