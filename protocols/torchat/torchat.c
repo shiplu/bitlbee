@@ -237,7 +237,7 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "MESSAGE", torchat_parse_message }
 	};
 
-	if (!td || td->fd == -1)
+	if (!td || !td->ssl || td->fd == -1)
 		return FALSE;
 
 	/* Read the whole data. */
