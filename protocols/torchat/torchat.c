@@ -329,9 +329,22 @@ static void torchat_add_buddy(struct im_connection *ic, char *who, char *group)
 	torchat_printf(ic, "ADD %s\n", who);
 }
 
-static void torchat_set_away(struct im_connection *ic, char *state_txt, char *message)
+static GList *torchat_away_states(struct im_connection *ic)
 {
-	if (state_txt == NULL) {
+	static GList *l = NULL;
+
+	if (l == NULL) {
+		l = g_list_append(l, "available");
+		l = g_list_append(l, "away");
+		l = g_list_append(l, "xa");
+	}
+
+	return l;
+}
+
+static void torchat_set_away(struct im_connection *ic, char *state, char *message)
+{
+	if (state == NULL) {
 		torchat_printf(ic, "STATUS available\n");
 
 		if (set_getstr(&ic->acc->set, "description"))
@@ -340,8 +353,10 @@ static void torchat_set_away(struct im_connection *ic, char *state_txt, char *me
 			torchat_printf(ic, "DESCRIPTION \n");
 	}
 	else {
-		torchat_printf(ic, "STATUS away\n");
-		torchat_printf(ic, "DESCRIPTION %s\n", message);
+		torchat_printf(ic, "STATUS %s\n", state);
+		
+		if (message)
+			torchat_printf(ic, "DESCRIPTION %s\n", message);
 	}
 }
 
@@ -353,6 +368,8 @@ static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message,
 static void torchat_logout(struct im_connection *ic)
 {
 	struct torchat_data *td = ic->proto_data;
+
+	torchat_printf(ic, "STATUS offline\n");
 
 	g_free(td);
 
@@ -370,6 +387,7 @@ static gboolean torchat_start_stream(struct im_connection *ic)
 		td->bfd = b_input_add(td->fd, B_EV_IO_READ, torchat_read_callback, ic);
 
 	return torchat_printf(ic, "PASS %s\n", ic->acc->pass) &&
+	       torchat_printf(ic, "STATUS available\n") &&
 	       torchat_printf(ic, "LIST\n");
 }
 
@@ -469,6 +487,7 @@ void init_plugin(void)
 	ret->buddy_msg = torchat_buddy_msg;
 	ret->handle_cmp = g_strcasecmp;
 	ret->set_my_name = torchat_set_my_name;
+	ret->away_states = torchat_away_states;
 	ret->set_away = torchat_set_away;
 	ret->add_buddy = torchat_add_buddy;
 	ret->remove_buddy = torchat_remove_buddy;
