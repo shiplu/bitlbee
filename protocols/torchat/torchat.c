@@ -293,7 +293,7 @@ static void torchat_buddy_data_add(bee_user_t *bu)
 static void torchat_buddy_data_free(bee_user_t *bu)
 {
 	struct torchat_buddy_data *bd = bu->data;
-	
+
 	if (bd->client.name)
 		g_free(bd->client.name);
 
@@ -334,9 +334,8 @@ static GList *torchat_away_states(struct im_connection *ic)
 	static GList *l = NULL;
 
 	if (l == NULL) {
-		l = g_list_append(l, "available");
 		l = g_list_append(l, "away");
-		l = g_list_append(l, "xa");
+		l = g_list_append(l, "extended away");
 	}
 
 	return l;
@@ -353,8 +352,8 @@ static void torchat_set_away(struct im_connection *ic, char *state, char *messag
 			torchat_printf(ic, "DESCRIPTION \n");
 	}
 	else {
-		torchat_printf(ic, "STATUS %s\n", state);
-		
+		torchat_printf(ic, "STATUS %s\n", (!strcmp(state, "extended away")) ? "xa" : state);
+
 		if (message)
 			torchat_printf(ic, "DESCRIPTION %s\n", message);
 	}
