@@ -38,6 +38,8 @@
 
 struct torchat_data {
 	struct im_connection *ic;
+	/* The onion ID of the current account */
+	char* id;
 	/* The effective file descriptor. We store it here so any function can
 	 * write() to it. */
 	int fd;
@@ -120,6 +122,23 @@ static int torchat_printf(struct im_connection *ic, char *fmt, ...)
 
 static void torchat_parse_authorized(struct im_connection *ic, char *address, char* line)
 {
+	struct torchat_data *td = ic->proto_data;
+	account_t *acc = ic->acc;
+
+	if (line && *line) {
+		if (td->id) {
+			if (strcmp(td->id, line)) {
+				g_free(td->id);
+
+				td->id = g_strdup(line);
+			}
+		} else {
+			td->id = g_strdup(line);
+		}
+
+		set_setstr(&acc->set, "id", td->id);
+	}
+
 	imcb_connected(ic);
 }
 
@@ -220,7 +239,7 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	struct im_connection *ic = data;
 	struct torchat_data *td = ic->proto_data;
 	char buf[1024];
-	int st, i, times = 1, current = 0;
+	int st, i;
 	char **lines, **lineptr, *line, *tmp, *address;
 	static struct parse_map {
 		char *k;
@@ -345,11 +364,7 @@ static void torchat_set_away(struct im_connection *ic, char *state, char *messag
 {
 	if (state == NULL) {
 		torchat_printf(ic, "STATUS available\n");
-
-		if (set_getstr(&ic->acc->set, "description"))
-			torchat_printf(ic, "DESCRIPTION %s\n", set_getstr(&ic->acc->set, "description"));
-		else
-			torchat_printf(ic, "DESCRIPTION \n");
+		torchat_printf(ic, "DESCRIPTION %s\n", message);
 	}
 	else {
 		torchat_printf(ic, "STATUS %s\n", (!strcmp(state, "extended away")) ? "xa" : state);
@@ -371,6 +386,9 @@ static void torchat_logout(struct im_connection *ic)
 	torchat_printf(ic, "STATUS offline\n");
 
 	g_free(td);
+	
+	if (td->id)
+		g_free(td->id);
 
 	ic->proto_data = NULL;
 }
@@ -443,19 +461,18 @@ static char *torchat_set_display_name(set_t *set, char *value)
 	return value;
 }
 
-static char *torchat_set_description(set_t *set, char *value)
-{
-	account_t *acc = set->data;
-	struct im_connection *ic = acc->ic;
-
-	torchat_printf(ic, "DESCRIPTION %s\n", value);
-
-	return value;
-}
-
 static void torchat_set_my_name(struct im_connection *ic, char *info)
 {
 	torchat_set_display_name(set_find(&ic->acc->set, "display_name"), info);
+}
+
+static char *torchat_dont_set(set_t *set, char *value)
+{
+	account_t *acc = set->data;
+	struct im_connection *ic = acc->ic;
+	struct torchat_data *td = ic->proto_data;
+
+	return g_strdup(td->id);
 }
 
 static void torchat_init(account_t *acc)
@@ -468,11 +485,12 @@ static void torchat_init(account_t *acc)
 	s = set_add(&acc->set, "port", TORCHAT_DEFAULT_PORT, set_eval_int, acc);
 	s->flags |= ACC_SET_OFFLINE_ONLY;
 
-	s = set_add(&acc->set, "display_name", NULL, torchat_set_display_name, acc);
-	s->flags |= ACC_SET_NOSAVE | ACC_SET_ONLINE_ONLY;
+	s = set_add(&acc->set, "id", NULL, torchat_dont_set, acc);
+	s->flags |= ACC_SET_NOSAVE;
 
-	s = set_add(&acc->set, "description", NULL, torchat_set_description, acc);
-	s->flags |= ACC_SET_NOSAVE | ACC_SET_ONLINE_ONLY;
+	s = set_add(&acc->set, "display_name", NULL, torchat_set_display_name, acc);
+
+	acc->flags |= ACC_FLAG_AWAY_MESSAGE | ACC_FLAG_STATUS_MESSAGE;
 }
 
 void init_plugin(void)
