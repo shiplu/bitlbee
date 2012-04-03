@@ -374,6 +374,21 @@ static void torchat_set_away(struct im_connection *ic, char *state, char *messag
 	}
 }
 
+static void torchat_get_info(struct im_connection *ic, char *who)
+{
+	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, who);
+	struct torchat_buddy_data *bd = bu->data;
+
+	if (bd->client.name)
+		imcb_log(ic, "%s is using %s %s", who, bd->client.name, bd->client.version);
+
+	if (bu->fullname)
+		imcb_log(ic, "%s's name is `%s'", who, bu->fullname);
+
+	if (bu->status_msg)
+		imcb_log(ic, "%s's description is `%s'", who, bu->status_msg);
+}
+
 static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
 {
 	return torchat_printf(ic, "MESSAGE %s %s\n", who, message);
@@ -506,6 +521,7 @@ void init_plugin(void)
 	ret->set_my_name = torchat_set_my_name;
 	ret->away_states = torchat_away_states;
 	ret->set_away = torchat_set_away;
+	ret->get_info = torchat_get_info;
 	ret->add_buddy = torchat_add_buddy;
 	ret->remove_buddy = torchat_remove_buddy;
 	ret->buddy_action = torchat_buddy_action;
