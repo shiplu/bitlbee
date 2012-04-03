@@ -205,10 +205,7 @@ static void torchat_parse_name(struct im_connection *ic, char *address, char* li
 
 static void torchat_parse_description(struct im_connection *ic, char *address, char* line)
 {
-	if (strlen(line) > 0)
-		imcb_buddy_status_msg(ic, address, line);
-	else
-		imcb_buddy_status_msg(ic, address, NULL);
+	imcb_buddy_status_msg(ic, address, line);
 }
 
 static void torchat_parse_list(struct im_connection *ic, char *address, char* line)
@@ -238,8 +235,8 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 {
 	struct im_connection *ic = data;
 	struct torchat_data *td = ic->proto_data;
-	char buf[1024];
-	int st, i;
+	char* buf = NULL;
+	int st, i, times = 0, current = 0;
 	char **lines, **lineptr, *line, *tmp, *address;
 	static struct parse_map {
 		char *k;
@@ -261,11 +258,16 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	if (!td || !td->ssl || td->fd == -1)
 		return FALSE;
 
-	/* Read the whole data. */
-	st = ssl_read(td->ssl, buf, sizeof(buf));
-	if (st > 0) {
-		buf[st] = '\0';
+	do {
+		times   += 1;
+		buf      = g_realloc(buf, times * 256);
+		st       = ssl_read(td->ssl, buf + ((times - 1) * 256), 256);
+		current += st;
+	} while (st == 256);
 
+	buf[current] = '\0';
+
+	if (st > 0) {
 		/* Then split it up to lines. */
 		lineptr = lines = g_strsplit(buf, "\n", 0);
 
@@ -291,17 +293,27 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		}
 
 		g_strfreev(lines);
-	} else if (st == 0 || (st < 0 && !sockerr_again())) {
-		closesocket(td->fd);
-		td->fd = -1;
-
-		imcb_error(ic, "Error while reading from server");
-		imc_logout(ic, TRUE);
-
-		return FALSE;
+	} else {
+		if (!sockerr_again()) {
+			goto error;
+		}
 	}
 
+	g_free(buf);
+
 	return TRUE;
+
+error:
+	ssl_disconnect(td->ssl);
+	g_free(buf);
+
+	td->fd  = -1;
+	td->ssl = NULL;
+
+	imcb_error(ic, "Error while reading from server");
+	imc_logout(ic, TRUE);
+
+	return FALSE;
 }
 
 static void torchat_buddy_data_add(bee_user_t *bu)
@@ -320,6 +332,22 @@ static void torchat_buddy_data_free(bee_user_t *bu)
 		g_free(bd->client.version);
 
 	g_free(bd);
+}
+
+GList *torchat_buddy_action_list(bee_user_t *bu)
+{
+	static GList *ret = NULL;
+	
+	if (ret == NULL) {
+		static const struct buddy_action ba[] = {
+			{ "VERSION", "Get the client the buddy is using" },
+			{ NULL, NULL }
+		};
+		
+		ret = g_list_prepend(ret, (void*) ba + 0);
+	}
+	
+	return ret;
 }
 
 static void *torchat_buddy_action(struct bee_user *bu, const char *action, char * const args[], void *data)
@@ -380,13 +408,13 @@ static void torchat_get_info(struct im_connection *ic, char *who)
 	struct torchat_buddy_data *bd = bu->data;
 
 	if (bd->client.name)
-		imcb_log(ic, "%s is using %s %s", who, bd->client.name, bd->client.version);
+		imcb_log(ic, "%s - client is %s %s", who, bd->client.name, bd->client.version);
 
 	if (bu->fullname)
-		imcb_log(ic, "%s's name is `%s'", who, bu->fullname);
+		imcb_log(ic, "%s - name is `%s'", who, bu->fullname);
 
 	if (bu->status_msg)
-		imcb_log(ic, "%s's description is `%s'", who, bu->status_msg);
+		imcb_log(ic, "%s - description is `%s'", who, bu->status_msg);
 }
 
 static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
@@ -525,6 +553,7 @@ void init_plugin(void)
 	ret->add_buddy = torchat_add_buddy;
 	ret->remove_buddy = torchat_remove_buddy;
 	ret->buddy_action = torchat_buddy_action;
+	ret->buddy_action_list = torchat_buddy_action_list;
 	ret->buddy_data_add = torchat_buddy_data_add;
 	ret->buddy_data_free = torchat_buddy_data_free;
 
