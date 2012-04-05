@@ -786,13 +786,7 @@ void twitter_flush_timeline(struct im_connection *ic)
 
 	if (ignore_backlog && td->timeline_id == 0) {
 		if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0) {
-			if (!td->timeline_gc)
-				twitter_groupchat_init(ic);
-
-			gc = td->timeline_gc;
-			if (!gc->joined)
-				imcb_chat_add_buddy(gc, ic->acc->user);
-		}
+			twitter_groupchat(ic, NULL);
 
 		for (l = output; l; l = g_slist_next(l)) {
 			status = l->data;
