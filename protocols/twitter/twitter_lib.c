@@ -751,9 +751,12 @@ void twitter_flush_timeline(struct im_connection *ic)
 {
 	struct twitter_data *td = ic->proto_data;
 	gboolean include_mentions = set_getbool(&ic->acc->set, "fetch_mentions");
+	gboolean ignore_backlog = set_getbool(&ic->acc->set, "ignore_backlog");
 	int show_old_mentions = set_getint(&ic->acc->set, "show_old_mentions");
 	struct twitter_xml_list *home_timeline = td->home_timeline_obj;
 	struct twitter_xml_list *mentions = td->mentions_obj;
+	struct twitter_xml_status *status;
+	struct groupchat *gc;
 	GSList *output = NULL;
 	GSList *l;
 
@@ -781,11 +784,28 @@ void twitter_flush_timeline(struct im_connection *ic)
 		}
 	}
 
-	// See if the user wants to see the messages in a groupchat window or as private messages.
-	if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0)
-		twitter_groupchat(ic, output);
-	else
-		twitter_private_message_chat(ic, output);
+	if (ignore_backlog && td->timeline_id == 0) {
+		if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0) {
+			if (!td->timeline_gc)
+				twitter_groupchat_init(ic);
+
+			gc = td->timeline_gc;
+			if (!gc->joined)
+				imcb_chat_add_buddy(gc, ic->acc->user);
+		}
+
+		for (l = output; l; l = g_slist_next(l)) {
+			status = l->data;
+
+			td->timeline_id = MAX(td->timeline_id, status->id);
+		}
+	} else {
+		// See if the user wants to see the messages in a groupchat window or as private messages.
+		if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0)
+			twitter_groupchat(ic, output);
+		else
+			twitter_private_message_chat(ic, output);
+	}
 
 	g_slist_free(output);
 
