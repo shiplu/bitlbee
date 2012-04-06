@@ -94,10 +94,13 @@ static int torchat_write(struct im_connection *ic, char *buf, int len)
 	/* This poll is necessary or we'll get a SIGPIPE when we write() to
 	 * td->fd. */
 	poll(pfd, 1, 1000);
+
 	if (pfd[0].revents & POLLHUP) {
 		imc_logout(ic, TRUE);
+
 		return FALSE;
 	}
+
 	ssl_write(td->ssl, buf, len);
 
 	return TRUE;
