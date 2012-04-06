@@ -139,6 +139,9 @@ static void torchat_parse_authorized(struct im_connection *ic, char *address, ch
 		set_setstr(&acc->set, "id", td->id);
 	}
 
+	if (set_getstr(&acc->set, "display_name"))
+		torchat_printf(ic, "NAME %s\n", set_getstr(&acc->set, "display_name"));
+
 	imcb_connected(ic);
 }
 
@@ -498,15 +501,12 @@ static char *torchat_set_display_name(set_t *set, char *value)
 {
 	account_t *acc = set->data;
 	struct im_connection *ic = acc->ic;
+	struct torchat_data *td = ic->proto_data;
 
-	torchat_printf(ic, "NAME %s\n", value);
+	if (td->ssl)
+		torchat_printf(ic, "NAME %s\n", value);
 
 	return value;
-}
-
-static void torchat_set_my_name(struct im_connection *ic, char *info)
-{
-	torchat_set_display_name(set_find(&ic->acc->set, "display_name"), info);
 }
 
 static char *torchat_dont_set(set_t *set, char *value)
@@ -546,7 +546,6 @@ void init_plugin(void)
 	ret->logout = torchat_logout;
 	ret->buddy_msg = torchat_buddy_msg;
 	ret->handle_cmp = g_strcasecmp;
-	ret->set_my_name = torchat_set_my_name;
 	ret->away_states = torchat_away_states;
 	ret->set_away = torchat_set_away;
 	ret->get_info = torchat_get_info;
