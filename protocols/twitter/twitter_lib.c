@@ -751,14 +751,15 @@ void twitter_flush_timeline(struct im_connection *ic)
 {
 	struct twitter_data *td = ic->proto_data;
 	gboolean include_mentions = set_getbool(&ic->acc->set, "fetch_mentions");
-	gboolean ignore_backlog = set_getbool(&ic->acc->set, "ignore_backlog");
-	int show_old_mentions = set_getint(&ic->acc->set, "show_old_mentions");
+	int backlog = set_getbool(&ic->acc->set, "backlog");
 	struct twitter_xml_list *home_timeline = td->home_timeline_obj;
 	struct twitter_xml_list *mentions = td->mentions_obj;
 	struct twitter_xml_status *status;
 	struct groupchat *gc;
+	GSList *original = NULL;
 	GSList *output = NULL;
 	GSList *l;
+	int i, length;
 
 	if (!(td->flags & TWITTER_GOT_TIMELINE)) {
 		return;
@@ -776,7 +777,7 @@ void twitter_flush_timeline(struct im_connection *ic)
 
 	if (include_mentions && mentions && mentions->list) {
 		for (l = mentions->list; l; l = g_slist_next(l)) {
-			if (show_old_mentions < 1 && output && twitter_compare_elements(l->data, output->data) < 0) {
+			if (output && twitter_compare_elements(l->data, output->data) < 0) {
 				continue;
 			}
 
@@ -784,24 +785,26 @@ void twitter_flush_timeline(struct im_connection *ic)
 		}
 	}
 
-	if (ignore_backlog && td->timeline_id == 0) {
-		if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0) {
-			twitter_groupchat(ic, NULL);
+	original = output;
 
+	if (td->timeline_id == 0 && g_slist_length(output) > backlog) {
 		for (l = output; l; l = g_slist_next(l)) {
 			status = l->data;
 
 			td->timeline_id = MAX(td->timeline_id, status->id);
 		}
-	} else {
-		// See if the user wants to see the messages in a groupchat window or as private messages.
-		if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0)
-			twitter_groupchat(ic, output);
-		else
-			twitter_private_message_chat(ic, output);
+
+		for (i = 0, length = g_slist_length(output); i < length - backlog; i++)
+			output = output->next;
 	}
 
-	g_slist_free(output);
+	// See if the user wants to see the messages in a groupchat window or as private messages.
+	if (g_strcasecmp(set_getstr(&ic->acc->set, "mode"), "chat") == 0)
+		twitter_groupchat(ic, output);
+	else
+		twitter_private_message_chat(ic, output);
+
+	g_slist_free(original);
 
 	txl_free(home_timeline);
 	txl_free(mentions);
@@ -829,6 +832,9 @@ void twitter_get_home_timeline(struct im_connection *ic, gint64 next_cursor)
 	if (td->timeline_id) {
 		args[4] = "since_id";
 		args[5] = g_strdup_printf("%llu", (long long unsigned int) td->timeline_id);
+	} else {
+		args[4] = "count";
+		args[5] = g_strdup_printf("%d", set_getint(&ic->acc->set, "backlog"));
 	}
 
 	if (twitter_http(ic, TWITTER_HOME_TIMELINE_URL, twitter_http_get_home_timeline, ic, 0, args,
@@ -867,7 +873,7 @@ void twitter_get_mentions(struct im_connection *ic, gint64 next_cursor)
 		args[5] = g_strdup_printf("%llu", (long long unsigned int) td->timeline_id);
 	} else {
 		args[4] = "count";
-		args[5] = g_strdup_printf("%d", set_getint(&ic->acc->set, "show_old_mentions"));
+		args[5] = g_strdup_printf("%d", set_getint(&ic->acc->set, "backlog"));
 	}
 
 	if (twitter_http(ic, TWITTER_MENTIONS_URL, twitter_http_get_mentions,
