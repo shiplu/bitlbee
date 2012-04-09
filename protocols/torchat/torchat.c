@@ -106,17 +106,21 @@ static int torchat_write(struct im_connection *ic, char *buf, int len)
 	return TRUE;
 }
 
-static int torchat_printf(struct im_connection *ic, char *fmt, ...)
+static int torchat_send(struct im_connection *ic, char *fmt, ...)
 {
 	va_list args;
 	char* str;
-	int st;
+	int st, length;
 
 	va_start(args, fmt);
 	g_vasprintf(&str, fmt, args);
 	va_end(args);
 
-	st = torchat_write(ic, str, strlen(str));
+	length = strlen(str);
+	
+	str[length] = '\n'
+
+	st = torchat_write(ic, str, length);
 
 	g_free(str);
 
@@ -143,7 +147,7 @@ static void torchat_parse_authorized(struct im_connection *ic, char *address, ch
 	}
 
 	if (set_getstr(&acc->set, "display_name"))
-		torchat_printf(ic, "NAME %s\n", set_getstr(&acc->set, "display_name"));
+		torchat_send(ic, "NAME %s", set_getstr(&acc->set, "display_name"));
 
 	imcb_connected(ic);
 }
@@ -223,10 +227,10 @@ static void torchat_parse_list(struct im_connection *ic, char *address, char* li
 	while ((id = *idptr++) && strlen(id)) {
 		imcb_add_buddy(ic, id, NULL);
 
-		torchat_printf(ic, "STATUS %s\n", id);
-		torchat_printf(ic, "CLIENT %s\n", id);
-		torchat_printf(ic, "NAME %s\n", id);
-		torchat_printf(ic, "DESCRIPTION %s\n", id);
+		torchat_send(ic, "STATUS %s", id);
+		torchat_send(ic, "CLIENT %s", id);
+		torchat_send(ic, "NAME %s", id);
+		torchat_send(ic, "DESCRIPTION %s", id);
 	}
 
 	g_strfreev(ids);
@@ -322,6 +326,16 @@ error:
 	return FALSE;
 }
 
+static void torchat_add_permit(struct im_connection *ic, char *who)
+{
+	torchat_send(ic, "BLOCK %s", who);
+}
+
+static void torchat_rem_permit(struct im_connection *ic, char *who)
+{
+	torchat_send(ic, "ALLOW %s", who);
+}
+
 static void torchat_buddy_data_add(bee_user_t *bu)
 {
 	bu->data = g_new0(struct torchat_buddy_data, 1);
@@ -374,12 +388,12 @@ static void *torchat_buddy_action(struct bee_user *bu, const char *action, char 
 
 static void torchat_remove_buddy(struct im_connection *ic, char *who, char *group)
 {
-	torchat_printf(ic, "REMOVE %s\n", who);
+	torchat_send(ic, "REMOVE %s", who);
 }
 
 static void torchat_add_buddy(struct im_connection *ic, char *who, char *group)
 {
-	torchat_printf(ic, "ADD %s\n", who);
+	torchat_send(ic, "ADD %s", who);
 }
 
 static GList *torchat_away_states(struct im_connection *ic)
@@ -397,14 +411,14 @@ static GList *torchat_away_states(struct im_connection *ic)
 static void torchat_set_away(struct im_connection *ic, char *state, char *message)
 {
 	if (state == NULL) {
-		torchat_printf(ic, "STATUS available\n");
-		torchat_printf(ic, "DESCRIPTION %s\n", message);
+		torchat_send(ic, "STATUS available");
+		torchat_send(ic, "DESCRIPTION %s", message);
 	}
 	else {
-		torchat_printf(ic, "STATUS %s\n", (!strcmp(state, "extended away")) ? "xa" : state);
+		torchat_send(ic, "STATUS %s", (!strcmp(state, "extended away")) ? "xa" : state);
 
 		if (message)
-			torchat_printf(ic, "DESCRIPTION %s\n", message);
+			torchat_send(ic, "DESCRIPTION %s", message);
 	}
 }
 
@@ -425,14 +439,14 @@ static void torchat_get_info(struct im_connection *ic, char *who)
 
 static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
 {
-	return torchat_printf(ic, "MESSAGE %s %s\n", who, message);
+	return torchat_send(ic, "MESSAGE %s %s", who, message);
 }
 
 static void torchat_logout(struct im_connection *ic)
 {
 	struct torchat_data *td = ic->proto_data;
 
-	torchat_printf(ic, "STATUS offline\n");
+	torchat_send(ic, "STATUS offline");
 
 	g_free(td);
 	
@@ -452,9 +466,9 @@ static gboolean torchat_start_stream(struct im_connection *ic)
 	if (td->bfd <= 0)
 		td->bfd = b_input_add(td->fd, B_EV_IO_READ, torchat_read_callback, ic);
 
-	return torchat_printf(ic, "PASS %s\n", ic->acc->pass) &&
-	       torchat_printf(ic, "STATUS available\n") &&
-	       torchat_printf(ic, "LIST\n");
+	return torchat_send(ic, "PASS %s", ic->acc->pass) &&
+	       torchat_send(ic, "STATUS available") &&
+	       torchat_send(ic, "LIST");
 }
 
 static gboolean torchat_connected_ssl(gpointer data, int returncode, void *source, b_input_condition cond)
@@ -481,7 +495,7 @@ static gboolean torchat_connected(gpointer data, gint fd, b_input_condition cond
 	struct torchat_data *td = ic->proto_data;
 	account_t *acc = ic->acc;
 
-	write(fd, "STARTTLS\n", 9);
+	write(fd, "STARTTLS", 9);
 	td->ssl = ssl_starttls(fd, set_getstr(&acc->set, "server"), FALSE, torchat_connected_ssl, ic);
 
 	return TRUE;
@@ -507,7 +521,7 @@ static char *torchat_set_display_name(set_t *set, char *value)
 	struct torchat_data *td = ic->proto_data;
 
 	if (td->ssl)
-		torchat_printf(ic, "NAME %s\n", value);
+		torchat_send(ic, "NAME %s", value);
 
 	return value;
 }
@@ -558,6 +572,8 @@ void init_plugin(void)
 	ret->buddy_action_list = torchat_buddy_action_list;
 	ret->buddy_data_add = torchat_buddy_data_add;
 	ret->buddy_data_free = torchat_buddy_data_free;
+	ret->add_permit = torchat_add_permit;
+	ret->rem_permit = torchat_rem_permit;
 
 	register_protocol(ret);
 }
