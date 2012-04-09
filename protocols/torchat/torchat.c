@@ -328,12 +328,12 @@ error:
 
 static void torchat_add_permit(struct im_connection *ic, char *who)
 {
-	torchat_send(ic, "BLOCK %s", who);
+	torchat_send(ic, "ALLOW %s", who);
 }
 
 static void torchat_rem_permit(struct im_connection *ic, char *who)
 {
-	torchat_send(ic, "ALLOW %s", who);
+	torchat_send(ic, "BLOCK %s", who);
 }
 
 static void torchat_buddy_data_add(bee_user_t *bu)
@@ -447,11 +447,11 @@ static void torchat_logout(struct im_connection *ic)
 	struct torchat_data *td = ic->proto_data;
 
 	torchat_send(ic, "STATUS offline");
-
-	g_free(td);
 	
 	if (td->id)
 		g_free(td->id);
+
+	g_free(td);
 
 	ic->proto_data = NULL;
 }
