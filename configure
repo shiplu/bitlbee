@@ -87,7 +87,7 @@ Option		Description				Default
 --skype=0/1/plugin
 		Disable/enable Skype support		$skype
 --omegle=0/1/plugin
-		Disable/enable TorChat support		$omegle
+		Disable/enable Omegle support		$omegle
 
 --events=...	Event handler (glib, libevent)		$events
 --ssl=...	SSL library to use (gnutls, nss, openssl, bogus, auto)
