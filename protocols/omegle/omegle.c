@@ -155,7 +155,7 @@ static void omegle_start_convo(struct im_connection *ic, char *who, char *host)
 	omegle_get(ic, who, host, "/start", omegle_convo_got_id);
 }
 
-static void omegle_chose_server (struct http_request *req)
+static void omegle_chose_server(struct http_request *req)
 {
 	struct bee_user *bu = req->data;
 	struct im_connection *ic = bu->ic;
