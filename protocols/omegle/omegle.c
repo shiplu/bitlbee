@@ -158,6 +158,7 @@ static void omegle_start_convo(struct im_connection *ic, char *who, char *host)
 static void omegle_chose_server(struct http_request *req)
 {
 	struct bee_user *bu = req->data;
+	struct omegle_buddy_data *bd = bu->data;
 	struct im_connection *ic = bu->ic;
 	char *who = bu->handle;
 	json_error_t error;
@@ -168,19 +169,16 @@ static void omegle_chose_server(struct http_request *req)
 
 	if (!(root = json_loads(req->reply_body, 0, &error)))
 		goto error;
-	}
 
-	if (!(servers = json_object_get(root, "servers"))) {
+	if (!(servers = json_object_get(root, "servers")))
 		goto error;
-	}
 
 	length = json_array_size(servers);
 	rand = g_rand_new();
 	i = g_rand_int_range(rand, 0, length);
 
-	if (!(json_string_value(json_array_get(servers, i)))) {
+	if (!(json_string_value(json_array_get(servers, i))))
 		goto error;
-	}
 
 	omegle_start_convo(ic, who, g_strdup(json_string_value(json_array_get(servers, i))));
 
@@ -315,7 +313,7 @@ static int omegle_buddy_msg(struct im_connection *ic, char *who, char *message, 
 	struct omegle_buddy_data *bd = bu->data;
 
 	if (!bd->session_id) {
-		g_slist_append(bd->backlog, g_strdup(message));
+		bd->backlog = g_slist_append(bd->backlog, g_strdup(message));
 
 		omegle_add_permit(ic, who);
 	} else {
@@ -367,7 +365,7 @@ static void omegle_handle_events(struct http_request *req)
 	}
 
 	if (!(root = json_loads(req->reply_body, 0, &error))) {
-		imcb_error(ic, "Could not parse JSON: %s", error->text);
+		imcb_error(ic, "Could not parse JSON: %s", error.text);
 
 		bd->checking = FALSE;
 
