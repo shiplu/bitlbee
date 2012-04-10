@@ -326,6 +326,14 @@ error:
 	return FALSE;
 }
 
+static void torchat_add_deny(struct im_connection *ic, char *who)
+{
+}
+
+static void torchat_rem_deny(struct im_connection *ic, char *who)
+{
+}
+
 static void torchat_add_permit(struct im_connection *ic, char *who)
 {
 	torchat_send(ic, "ALLOW %s", who);
@@ -574,6 +582,8 @@ void init_plugin(void)
 	ret->buddy_data_free = torchat_buddy_data_free;
 	ret->add_permit = torchat_add_permit;
 	ret->rem_permit = torchat_rem_permit;
+	ret->add_deny = torchat_add_deny;
+	ret->rem_deny = torchat_rem_deny;
 
 	register_protocol(ret);
 }
