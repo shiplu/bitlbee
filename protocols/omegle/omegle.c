@@ -34,6 +34,7 @@ struct omegle_buddy_data {
 	char* session_id;
 	gboolean checking;
 	gboolean connecting;
+	gboolean disconnecting;
 	GSList *backlog;
 };
 
@@ -224,6 +225,7 @@ static void omegle_disconnect_happened(struct im_connection *ic, char *who)
 
 	bd->checking = FALSE;
 	bd->connecting = FALSE;
+	bd->disconnecting = FALSE;
 }
 
 static void omegle_disconnect_happened_http(struct http_request *req)
@@ -235,6 +237,14 @@ static void omegle_disconnect_happened_http(struct http_request *req)
 
 static void omegle_disconnect(struct im_connection *ic, char *who)
 {
+	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
+	struct omegle_buddy_data *bd = bu->data;
+
+	if (bd->disconnecting)
+		return;
+
+	bd->disconnecting = TRUE;
+
 	omegle_send_with_callback(ic, who, "/disconnect", omegle_disconnect_happened_http);
 }
 
@@ -356,6 +366,9 @@ static void omegle_handle_events(struct http_request *req)
 	const char *name;
 	GSList *l;
 
+	if (bd->disconnecting)
+		return;
+
 	if (req->status_code != 200) {
 		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
 
@@ -364,13 +377,18 @@ static void omegle_handle_events(struct http_request *req)
 		return;
 	}
 
-	if (!(root = json_loads(req->reply_body, 0, &error))) {
+	if (!(root = json_loads(req->reply_body, JSON_DECODE_ANY, &error))) {
 		imcb_error(ic, "Could not parse JSON: %s", error.text);
+		imcb_error(ic, "at %d:%d in:", error.line, error.column);
+		imcb_error(ic, "%s", req->reply_body);
 
 		bd->checking = FALSE;
 
 		return;
 	}
+
+	if (!json_is_array(root))
+		return;
 
 	for (i = 0, length = json_array_size(root); i < length; i++) {
 		name = json_string_value(json_array_get(json_array_get(root, i), 0));
@@ -419,9 +437,8 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 		bu = l->data;
 		bd = bu->data;
 
-		if (bu->ic != ic || bd->checking || !bd->session_id) {
+		if (bu->ic != ic || bd->checking || !bd->session_id || bd->disconnecting)
 			continue;
-		}
 
 		bd->checking = TRUE;
 
