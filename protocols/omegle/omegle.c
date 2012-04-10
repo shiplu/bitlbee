@@ -324,7 +324,7 @@ static void omegle_init(account_t *acc)
 	s = set_add(&acc->set, "fetch_interval", "2", set_eval_int, acc);
 	s->flags |= ACC_SET_OFFLINE_ONLY;
 
-	s = set_add(&acc->set, "keep_online", "true", set_eval_bool, acc);
+	s = set_add(&acc->set, "keep_online", "false", set_eval_bool, acc);
 }
 
 static void omegle_handle_events(struct http_request *req)
