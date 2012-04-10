@@ -161,21 +161,41 @@ static void omegle_chose_server(struct http_request *req)
 	struct im_connection *ic = bu->ic;
 	char *who = bu->handle;
 	json_error_t error;
-	json_t *root;
+	json_t *root = NULL;
 	json_t *servers;
 	int length, i;
-	GRand* rand = g_rand_new();
+	GRand* rand = NULL;
 
-	root = json_loads(req->reply_body, 0, &error);
-	servers = json_object_get(root, "servers");
+	if (!(root = json_loads(req->reply_body, 0, &error)))
+		goto error;
+	}
+
+	if (!(servers = json_object_get(root, "servers"))) {
+		goto error;
+	}
 
 	length = json_array_size(servers);
+	rand = g_rand_new();
 	i = g_rand_int_range(rand, 0, length);
+
+	if (!(json_string_value(json_array_get(servers, i)))) {
+		goto error;
+	}
 
 	omegle_start_convo(ic, who, g_strdup(json_string_value(json_array_get(servers, i))));
 
 	json_decref(root);
 	g_rand_free(rand);
+
+	return;
+
+error:
+	if (root) json_decref(root);
+	if (rand) g_rand_free(rand);
+
+	imcb_error(ic, "Could not fetch the server list, set one to use in the config");
+
+	bd->connecting = FALSE;
 }
 
 static void omegle_disconnect_happened(struct im_connection *ic, char *who)
@@ -235,7 +255,7 @@ static void omegle_add_permit(struct im_connection *ic, char *who)
 	account_t *acc = ic->acc;
 	char *host = set_getstr(&acc->set, "host");
 
-	if (bd->connecting)
+	if (bd->connecting || bd->session_id)
 		return;
 
 	bd->connecting = TRUE;
@@ -338,7 +358,21 @@ static void omegle_handle_events(struct http_request *req)
 	const char *name;
 	GSList *l;
 
-	root = json_loads(req->reply_body, 0, &error);
+	if (req->status_code != 200) {
+		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
+
+		omegle_disconnect_happened(ic, bu->handle);
+
+		return;
+	}
+
+	if (!(root = json_loads(req->reply_body, 0, &error))) {
+		imcb_error(ic, "Could not parse JSON: %s", error->text);
+
+		bd->checking = FALSE;
+
+		return;
+	}
 
 	for (i = 0, length = json_array_size(root); i < length; i++) {
 		name = json_string_value(json_array_get(json_array_get(root, i), 0));
