@@ -19,3 +19,5 @@ when the partner disconnects.
 
 By default the plugin adds a buddy called `Stranger`, you can change the prefix and the quantity with the
 `stranger_prefix` and `auto_add_strangers` options.
+
+You can also use CTCPs, there is CONNECT and DISCONNECT CTCPs, that well, do what they are called.
