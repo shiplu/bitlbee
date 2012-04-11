@@ -353,6 +353,12 @@ static void omegle_init(account_t *acc)
 	s->flags |= ACC_SET_OFFLINE_ONLY;
 
 	s = set_add(&acc->set, "keep_online", "false", set_eval_bool, acc);
+
+	s = set_add(&acc->set, "auto_add_strangers", "1", set_eval_int, acc);
+	s->flags |= ACC_SET_OFFLINE_ONLY;
+
+	s = set_add(&acc->set, "stranger_prefix", "Stranger", set_eval_account, acc);
+	s->flags |= ACC_SET_OFFLINE_ONLY;
 }
 
 static void omegle_handle_events(struct http_request *req)
@@ -426,12 +432,33 @@ static void omegle_handle_events(struct http_request *req)
 gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 {
 	struct im_connection *ic = data;
-	GSList *l;
+	account_t *acc = ic->acc;
 	struct bee_user *bu;
 	struct omegle_buddy_data *bd;
+	int number, i;
+	char *name, *prefix;
+	GSList *l;
 
-	if (!(ic->flags & OPT_LOGGED_IN))
+	if (!(ic->flags & OPT_LOGGED_IN)) {
 		imcb_connected(ic);
+
+		prefix = set_getstr(&acc->set, "stranger_prefix");
+		number = set_getint(&acc->set, "auto_add_strangers");
+
+		for (i = 0; i < number; i++) {
+			if (i == 0)
+				name = g_strdup(prefix);
+			else
+				name = g_strdup_printf("%s%d", prefix, i);
+
+			imcb_add_buddy(ic, name, NULL);
+
+			if (set_getbool(&acc->set, "keep_online"))
+				imcb_buddy_status(ic, name, BEE_USER_ONLINE | BEE_USER_AWAY, NULL, NULL);
+
+			g_free(name);
+		}
+	}
 
 	for (l = ic->bee->users; l; l = l->next) {
 		bu = l->data;
