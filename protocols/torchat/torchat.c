@@ -401,7 +401,12 @@ static void torchat_remove_buddy(struct im_connection *ic, char *who, char *grou
 
 static void torchat_add_buddy(struct im_connection *ic, char *who, char *group)
 {
-	torchat_send(ic, "ADD %s", who);
+	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, who);
+
+	if (bu->flags & BEE_USER_LOCAL)
+		torchat_send(ic, "ADDTMP %s", who);
+	else
+		torchat_send(ic, "ADD %s", who);
 }
 
 static GList *torchat_away_states(struct im_connection *ic)
