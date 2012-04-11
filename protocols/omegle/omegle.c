@@ -23,6 +23,8 @@
 #include <http_client.h>
 #include <jansson.h>
 
+GSList *omegle_connections = NULL;
+
 struct omegle_data {
 	struct im_connection *ic;
 
@@ -302,6 +304,34 @@ static void omegle_buddy_data_free(bee_user_t *bu)
 	g_free(bd);
 }
 
+GList *omegle_buddy_action_list(bee_user_t *bu)
+{
+	static GList *ret = NULL;
+	
+	if (ret == NULL) {
+		static const struct buddy_action ba[] = {
+			{ "CONNECT", "Connect to a Stranger" },
+			{ "DISCONNECT", "Disconnect from the Stranger" },
+			{ NULL, NULL }
+		};
+		
+		ret = g_list_prepend(ret, (void*) ba + 0);
+	}
+	
+	return ret;
+}
+
+static void *omegle_buddy_action(struct bee_user *bu, const char *action, char * const args[], void *data)
+{
+	if (!strcmp(action, "CONNECT")) {
+		omegle_add_permit(bu->ic, bu->handle);
+	} else if (!strcmp(action, "DISCONNECT")) {
+		omegle_rem_permit(bu->ic, bu->handle);
+	}
+
+	return NULL;
+}
+
 static void omegle_remove_buddy(struct im_connection *ic, char *who, char *group)
 {
 	imcb_remove_buddy(ic, who, NULL);
@@ -341,6 +371,8 @@ static void omegle_logout(struct im_connection *ic)
 		g_free(od);
 	
 	ic->proto_data = NULL;
+
+	omegle_connections = g_slist_remove(omegle_connections, ic);
 }
 
 static void omegle_init(account_t *acc)
@@ -439,6 +471,10 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 	char *name, *prefix;
 	GSList *l;
 
+	// Check if we are still logged in...
+	if (!g_slist_find(omegle_connections, ic))
+		return 0;
+
 	if (!(ic->flags & OPT_LOGGED_IN)) {
 		imcb_connected(ic);
 
@@ -484,6 +520,9 @@ static void omegle_login(account_t *acc)
 	ic->proto_data = od;
 	od->ic = ic;
 
+	imcb_log(ic, "Connecting");
+	omegle_connections = g_slist_append(omegle_connections, ic);
+
 	od->main_loop_id = b_timeout_add(set_getint(&ic->acc->set, "fetch_interval") * 1000, omegle_main_loop, ic);
 }
 
@@ -499,6 +538,8 @@ void init_plugin(void)
 	ret->handle_cmp = g_strcasecmp;
 	ret->add_buddy = omegle_add_buddy;
 	ret->remove_buddy = omegle_remove_buddy;
+	ret->buddy_action = omegle_buddy_action;
+	ret->buddy_action_list = omegle_buddy_action_list;
 	ret->buddy_data_add = omegle_buddy_data_add;
 	ret->buddy_data_free = omegle_buddy_data_free;
 	ret->add_permit = omegle_add_permit;
