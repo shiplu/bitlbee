@@ -16,3 +16,6 @@ the contact when not connected, and as online when connected.
 
 If the contact is offline you can still talk to him or `allow` him to start talking, it will disconnect
 when the partner disconnects.
+
+By default the plugin adds a buddy called `Stranger`, you can change the prefix and the quantity with the
+`stranger_prefix` and `auto_add_strangers` options.
