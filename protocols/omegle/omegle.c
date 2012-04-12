@@ -426,6 +426,7 @@ static void omegle_handle_events(struct http_request *req)
 		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
 
 		bd->disconnected = TRUE;
+		bd->connecting = FALSE;
 
 		return;
 	}
@@ -511,9 +512,13 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 
 	for (l = ic->bee->users; l; l = l->next) {
 		bu = l->data;
+
+		if (!bu || bu->ic != ic)
+			continue;
+
 		bd = bu->data;
 
-		if (!bu || !bd)
+		if (!bd)
 			continue;
 
 		if (bd->disconnected) {
@@ -522,7 +527,7 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 			continue;
 		}
 
-		if (bu->ic != ic || bd->checking || !bd->session_id || bd->disconnecting)
+		if (bd->checking || !bd->session_id || bd->disconnecting)
 			continue;
 
 		bd->checking = TRUE;
