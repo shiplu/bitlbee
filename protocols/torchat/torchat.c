@@ -48,8 +48,6 @@ struct torchat_data {
 	int bfd;
 	/* ssl_getfd() uses this to get the file descriptor. */
 	void *ssl;
-	/* Same for file transfers. */
-	int filetransfer_status;
 };
 
 struct torchat_buddy_data {
