@@ -118,7 +118,7 @@ static int torchat_send(struct im_connection *ic, char *fmt, ...)
 
 	length = strlen(str);
 	
-	str[length] = '\n'
+	str[length] = '\n';
 
 	st = torchat_write(ic, str, length);
 
