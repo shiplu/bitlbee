@@ -513,6 +513,9 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 		bu = l->data;
 		bd = bu->data;
 
+		if (!bu || !bd)
+			continue;
+
 		if (bd->disconnected) {
 			to_disconnect = g_slist_append(to_disconnect, bu);
 
