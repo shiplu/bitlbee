@@ -508,7 +508,7 @@ static gboolean torchat_connected(gpointer data, gint fd, b_input_condition cond
 	struct torchat_data *td = ic->proto_data;
 	account_t *acc = ic->acc;
 
-	write(fd, "STARTTLS", 9);
+	write(fd, "STARTTLS\n", 9);
 	td->ssl = ssl_starttls(fd, set_getstr(&acc->set, "server"), FALSE, torchat_connected_ssl, ic);
 
 	return TRUE;
