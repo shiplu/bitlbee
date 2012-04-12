@@ -530,7 +530,12 @@ static char *torchat_set_display_name(set_t *set, char *value)
 {
 	account_t *acc = set->data;
 	struct im_connection *ic = acc->ic;
-	struct torchat_data *td = ic->proto_data;
+	struct torchat_data *td;
+
+	if (!ic)
+		return value;
+
+	td = ic->proto_data;
 
 	if (td->ssl)
 		torchat_send(ic, "NAME %s", value);
