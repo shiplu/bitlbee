@@ -120,7 +120,7 @@ static int torchat_send(struct im_connection *ic, char *fmt, ...)
 	
 	str[length] = '\n';
 
-	st = torchat_write(ic, str, length);
+	st = torchat_write(ic, str, length + 1);
 
 	g_free(str);
 
@@ -314,7 +314,7 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	return TRUE;
 
 error:
-	ssl_disconnect(td->ssl);
+	closesocket(td->fd);
 	g_free(buf);
 
 	td->fd  = -1;
@@ -401,12 +401,7 @@ static void torchat_remove_buddy(struct im_connection *ic, char *who, char *grou
 
 static void torchat_add_buddy(struct im_connection *ic, char *who, char *group)
 {
-	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, who);
-
-	if (bu->flags & BEE_USER_LOCAL)
-		torchat_send(ic, "ADDTMP %s", who);
-	else
-		torchat_send(ic, "ADD %s", who);
+	torchat_send(ic, "ADD %s", who);
 }
 
 static GList *torchat_away_states(struct im_connection *ic)
@@ -425,7 +420,11 @@ static void torchat_set_away(struct im_connection *ic, char *state, char *messag
 {
 	if (state == NULL) {
 		torchat_send(ic, "STATUS available");
-		torchat_send(ic, "DESCRIPTION %s", message);
+		
+		if (message)
+			torchat_send(ic, "DESCRIPTION %s", message);
+		else
+			torchat_send(ic, "DESCRIPTION");
 	}
 	else {
 		torchat_send(ic, "STATUS %s", (!strcmp(state, "extended away")) ? "xa" : state);
