@@ -270,15 +270,13 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 
 	do {
 		times   += 1;
-		buf      = g_realloc(buf, times * 256);
+		buf      = g_realloc(buf, (times * 256) + 1);
 		st       = ssl_read(td->ssl, buf + ((times - 1) * 256), 256);
 		current += st;
 	} while (st == 256);
 
-	buf[current] = '\0';
-
 	if (st > 0) {
-		/* Then split it up to lines. */
+		buf[current] = '\0';
 		lineptr = lines = g_strsplit(buf, "\n", 0);
 
 		while ((line = *lineptr++) && strlen(line)) {
@@ -304,26 +302,22 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 
 		g_strfreev(lines);
 	} else {
-		if (!sockerr_again()) {
-			goto error;
-		}
+		ssl_disconnect(td->ssl);
+
+		g_free(buf);
+
+		td->fd  = -1;
+		td->ssl = NULL;
+
+		imcb_error(ic, "Error while reading from server");
+		imc_logout(ic, TRUE);
+
+		return FALSE;
 	}
 
 	g_free(buf);
 
 	return TRUE;
-
-error:
-	closesocket(td->fd);
-	g_free(buf);
-
-	td->fd  = -1;
-	td->ssl = NULL;
-
-	imcb_error(ic, "Error while reading from server");
-	imc_logout(ic, TRUE);
-
-	return FALSE;
 }
 
 static void torchat_add_deny(struct im_connection *ic, char *who)
@@ -462,6 +456,9 @@ static void torchat_logout(struct im_connection *ic)
 	
 	if (td->id)
 		g_free(td->id);
+
+	if (td->ssl)
+		ssl_disconnect(td->ssl);
 
 	g_free(td);
 
