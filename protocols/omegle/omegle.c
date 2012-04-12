@@ -37,6 +37,7 @@ struct omegle_buddy_data {
 	gboolean checking;
 	gboolean connecting;
 	gboolean disconnecting;
+	gboolean disconnected;
 	GSList *backlog;
 };
 
@@ -144,8 +145,19 @@ static void omegle_convo_got_id(struct http_request *req)
 {
 	struct bee_user *bu = req->data;
 	struct omegle_buddy_data *bd = bu->data;
+	
+	if (req->status_code != 200)
+		goto error;
+
+	if (req->reply_body[0] != '"' || req->reply_body[strlen(req->reply_body) - 1] != '"')
+		goto error;
 
 	bd->session_id = g_strndup(req->reply_body + 1, strlen(req->reply_body) - 2);
+
+	return;
+
+error:
+	bd->disconnected = TRUE;
 }
 
 static void omegle_start_convo(struct im_connection *ic, char *who, char *host)
@@ -169,6 +181,9 @@ static void omegle_chose_server(struct http_request *req)
 	json_t *servers;
 	int length, i;
 	GRand* rand = NULL;
+
+	if (req->status_code != 200)
+		goto error;
 
 	if (!(root = json_loads(req->reply_body, 0, &error)))
 		goto error;
@@ -228,13 +243,16 @@ static void omegle_disconnect_happened(struct im_connection *ic, char *who)
 	bd->checking = FALSE;
 	bd->connecting = FALSE;
 	bd->disconnecting = FALSE;
+	bd->disconnected = FALSE;
 }
 
 static void omegle_disconnect_happened_http(struct http_request *req)
 {
 	struct bee_user *bu = req->data;
+	struct omegle_buddy_data *bd = bu->data;
 
-	omegle_disconnect_happened(bu->ic, bu->handle);
+	bd->disconnected = TRUE;
+	bd->disconnecting = FALSE;
 }
 
 static void omegle_disconnect(struct im_connection *ic, char *who)
@@ -404,13 +422,10 @@ static void omegle_handle_events(struct http_request *req)
 	const char *name;
 	GSList *l;
 
-	if (bd->disconnecting)
-		return;
-
 	if (req->status_code != 200) {
 		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
 
-		omegle_disconnect_happened(ic, bu->handle);
+		bd->disconnected = TRUE;
 
 		return;
 	}
@@ -450,9 +465,7 @@ static void omegle_handle_events(struct http_request *req)
 			imcb_buddy_typing(ic, bu->handle, 0);
 			imcb_buddy_msg(ic, bu->handle, (char*) json_string_value(json_array_get(json_array_get(root, i), 1)), 0, 0);
 		} else if (!strcmp(name, "strangerDisconnected")) {
-			omegle_disconnect_happened(ic, bu->handle);
-
-			break;
+			bd->disconnected = TRUE;
 		}
 	}
 
@@ -469,7 +482,7 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 	struct omegle_buddy_data *bd;
 	int number, i;
 	char *name, *prefix;
-	GSList *l;
+	GSList *to_disconnect = NULL, *l;
 
 	// Check if we are still logged in...
 	if (!g_slist_find(omegle_connections, ic))
@@ -500,6 +513,12 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 		bu = l->data;
 		bd = bu->data;
 
+		if (bd->disconnected) {
+			to_disconnect = g_slist_append(to_disconnect, bu);
+
+			continue;
+		}
+
 		if (bu->ic != ic || bd->checking || !bd->session_id || bd->disconnecting)
 			continue;
 
@@ -507,6 +526,15 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 
 		omegle_send_with_callback(ic, bu->handle, "/events", omegle_handle_events);
 	}
+
+	for (l = to_disconnect; l; l = l->next) {
+		bu = l->data;
+		bd = bu->data;
+
+		omegle_disconnect_happened(bu->ic, bu->handle);
+	}
+
+	g_slist_free(to_disconnect);
 
 	// If we are still logged in run this function again after timeout.
 	return (ic->flags & OPT_LOGGED_IN) == OPT_LOGGED_IN;
