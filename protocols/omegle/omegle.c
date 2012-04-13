@@ -442,6 +442,9 @@ static void omegle_handle_events(struct http_request *req)
 	}
 
 	if (!json_is_array(root)) {
+		if (json_is_null(root))
+			bd->disconnected = TRUE;
+
 		goto end;
 	}
 
