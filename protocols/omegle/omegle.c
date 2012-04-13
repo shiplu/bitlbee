@@ -441,8 +441,9 @@ static void omegle_handle_events(struct http_request *req)
 		return;
 	}
 
-	if (!json_is_array(root))
-		return;
+	if (!json_is_array(root)) {
+		goto end;
+	}
 
 	for (i = 0, length = json_array_size(root); i < length; i++) {
 		name = json_string_value(json_array_get(json_array_get(root, i), 0));
@@ -470,6 +471,7 @@ static void omegle_handle_events(struct http_request *req)
 		}
 	}
 
+end:
 	bd->checking = FALSE;
 
 	json_decref(root);
@@ -487,7 +489,7 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 
 	// Check if we are still logged in...
 	if (!g_slist_find(omegle_connections, ic))
-		return 0;
+		return FALSE;
 
 	if (!(ic->flags & OPT_LOGGED_IN)) {
 		imcb_connected(ic);
@@ -544,8 +546,7 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 
 	g_slist_free(to_disconnect);
 
-	// If we are still logged in run this function again after timeout.
-	return (ic->flags & OPT_LOGGED_IN) == OPT_LOGGED_IN;
+	return ic->flags & OPT_LOGGED_IN;
 }
 
 static void omegle_login(account_t *acc)
