@@ -443,7 +443,17 @@ static void torchat_get_info(struct im_connection *ic, char *who)
 
 static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
 {
-	return torchat_send(ic, "MESSAGE %s %s", who, message);
+	char **lines, **lineptr, *line;
+	int st = 0;
+
+	lineptr = lines = g_strsplit(message, "\n", 0);
+
+	while ((line = *lineptr++))
+		st += torchat_send(ic, "MESSAGE %s %s", who, line);
+
+	g_strfreev(lines);
+
+	return st;
 }
 
 static void torchat_logout(struct im_connection *ic)
