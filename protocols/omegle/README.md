@@ -21,3 +21,8 @@ By default the plugin adds a buddy called `Stranger`, you can change the prefix 
 `stranger_prefix` and `auto_add_strangers` options.
 
 You can also use CTCPs, there is CONNECT and DISCONNECT CTCPs, that well, do what they are called.
+
+If you want you can set the common topics to look for in the next stranger by sending a LIKES CTCP with a space
+separated list of topics. If the look for the stranger is taking too long and you're bored you can tell it to
+look for random strangers by sending an empty LIKES packet, remember to reset the LIKES after the completely
+random stranger though.
