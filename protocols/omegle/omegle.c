@@ -194,7 +194,7 @@ static void omegle_start_convo(struct im_connection *ic, char *who, char *host)
 
 		g_string_append_escaped(url, likes->str);
 	}
-	
+
 	omegle_get(ic, who, host, url->str, omegle_convo_got_id);
 
 	g_string_free(url, TRUE);
@@ -251,10 +251,17 @@ static void omegle_disconnect_happened(struct im_connection *ic, char *who)
 	struct omegle_buddy_data *bd = bu->data;
 	account_t *acc = ic->acc;
 
-	if (set_getbool(&acc->set, "keep_online"))
+	if (set_getbool(&acc->set, "keep_online")) {
+		if (bu->flags & BEE_USER_AWAY)
+			imcb_error(ic, "Lookup for a stranger failed");
+
 		imcb_buddy_status(ic, who, BEE_USER_ONLINE | BEE_USER_AWAY, NULL, NULL);
-	else
+	} else {
+		if (!(bu->flags & BEE_USER_ONLINE))
+			imcb_error(ic, "Lookup for a stranger failed");
+
 		imcb_buddy_status(ic, who, 0, NULL, NULL);
+	}
 
 	if (bd->host) {
 		g_free(bd->host);
@@ -384,15 +391,16 @@ static void *omegle_buddy_action(struct bee_user *bu, const char *action, char *
 		if (bd->likes) {
 			g_slist_free_full(bd->likes, g_free);
 
-			if (bd->session_id)
-				omegle_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
-
 			bd->likes = NULL;
 		}
 
-		do {
-			bd->likes = g_slist_append(bd->likes, g_strdup(*arg));
-		} while (*++arg);
+		if (*arg) {
+			do {
+				bd->likes = g_slist_append(bd->likes, g_strdup(*arg));
+			} while (*++arg);
+		} else if (bd->session_id) {
+			omegle_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
+		}
 	}
 
 	return NULL;
@@ -501,7 +509,13 @@ static void omegle_handle_events(struct http_request *req)
 		name  = json_string_value(json_array_get(json_array_get(root, i), 0));
 		value = json_array_get(json_array_get(root, i), 1);
 
-		if (!strcmp(name, "connected")) {
+		if (!strcmp(name, "waiting")) {
+			likes = g_new0(char*, 1);
+
+			imcb_buddy_action_response(bu, "WAITING", likes, NULL);
+
+			g_free(likes);
+		} else if (!strcmp(name, "connected")) {
 			imcb_buddy_status(ic, bu->handle, BEE_USER_ONLINE, NULL, NULL);
 
 			for (l = bd->backlog; l; l = l->next) {
