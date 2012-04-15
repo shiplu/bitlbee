@@ -383,22 +383,39 @@ static void *omegle_buddy_action(struct bee_user *bu, const char *action, char *
 {
 	struct omegle_buddy_data *bd = bu->data;
 	char **arg = (char**) args;
+	char **likes;
+	GSList *l;
+	int i;
 
 	if (!strcmp(action, "CONNECT")) {
 		omegle_add_permit(bu->ic, bu->handle);
 	} else if (!strcmp(action, "DISCONNECT")) {
 		omegle_rem_permit(bu->ic, bu->handle);
 	} else if (!strcmp(action, "LIKES")) {
-		if (bd->likes) {
-			g_slist_free_full(bd->likes, g_free);
+		if (!strcmp(*arg, "?")) {
+			if (!bd->likes)
+				return NULL;
 
-			bd->likes = NULL;
-		}
+			likes = g_new0(char*, g_slist_length(bd->likes) + 1);
 
-		if (*arg) {
-			do {
-				bd->likes = g_slist_append(bd->likes, g_strdup(*arg));
-			} while (*++arg);
+			for (i = 0, l = bd->likes; l; l = l->next, i++)
+				likes[i] = l->data;
+
+			imcb_buddy_action_response(bu, "LIKES", likes, NULL);
+
+			g_free(likes);
+		} else {
+			if (bd->likes) {
+				g_slist_free_full(bd->likes, g_free);
+
+				bd->likes = NULL;
+			}
+
+			if (*arg) {
+				do {
+					bd->likes = g_slist_append(bd->likes, g_strdup(*arg));
+				} while (*++arg);
+			}
 		}
 	} else if (!strcmp(action, "RANDOM")) {
 		if (bd->session_id)
