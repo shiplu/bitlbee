@@ -42,268 +42,24 @@ struct omegle_buddy_data {
 	GSList *likes;
 };
 
-static GString *g_string_append_escaped(GString *string, char *data)
-{
-	int i, length = strlen(data);
+struct omegle_groupchat_data {
+	char *host;
+	char *session_id;
+};
 
-	for (i = 0; i < length; i++) {
-		if (isalpha(data[i]) || isdigit(data[i]) ||
-		    data[i] == '-' || data[i] == '_' || data[i] == '.' || data[i] == '!' ||
-		    data[i] == '~' || data[i] == '*' || data[i] == '\'' || data[i] == '(' || data[i] == ')') {
-			g_string_append_c(string, data[i]);
-		} else if (data[i] == ' ') {
-			g_string_append_c(string, '+');
-		} else {
-			g_string_append_printf(string, "%%%x", data[i]);
-		}
-	}
-
-	return string;
-}
-
-static void omegle_http_dummy(struct http_request *req)
-{
-}
-
-static void omegle_get(struct im_connection *ic, char *who, char *host, char *path, http_input_function callback)
-{
-	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
-	GString *request;
-
-	if (!bu)
-		return;
-
-	request = g_string_new("");
-
-	g_string_append_printf(request, "GET %s HTTP/1.0\r\n", path);
-	g_string_append_printf(request, "Host: %s\r\n", host);
-	g_string_append_printf(request, "User-Agent: BitlBee " BITLBEE_VERSION " " ARCH "/" CPU "\r\n");
-	g_string_append_printf(request, "\r\n");
-
-	http_dorequest(host, 80, 0, request->str, callback, bu);
-
-	g_string_free(request, TRUE);
-}
-
-static void omegle_post(struct im_connection *ic, char *who, char *path, char *data, http_input_function callback)
-{
-	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
-	struct omegle_buddy_data *bd = bu->data;
-	GString *request;
-	GString *form;
-
-	if (!bu)
-		return;
-
-	request = g_string_new("");
-	form    = g_string_new("");
-
-	g_string_append_printf(form, "id=%s&%s", bd->session_id, data);
-
-	g_string_append_printf(request, "POST %s HTTP/1.0\r\n", path);
-	g_string_append_printf(request, "Host: %s\r\n", bd->host);
-	g_string_append_printf(request, "User-Agent: BitlBee " BITLBEE_VERSION " " ARCH "/" CPU "\r\n");
-	g_string_append_printf(request, "Content-Type: application/x-www-form-urlencoded\r\n");
-	g_string_append_printf(request, "Content-Length: %zd\r\n\r\n", form->len);
-	g_string_append_printf(request, "%s", form->str);
-
-	http_dorequest(bd->host, 80, 0, request->str, callback, bu);
-
-	g_string_free(request, TRUE);
-	g_string_free(form, TRUE);
-}
-
-static void omegle_send(struct im_connection *ic, char *who, char *path)
-{
-	omegle_post(ic, who, path, NULL, omegle_http_dummy);
-}
-
-static void omegle_send_with_callback(struct im_connection *ic, char *who, char *path, http_input_function callback)
-{
-	omegle_post(ic, who, path, NULL, callback);
-}
-
-static void omegle_send_message(struct im_connection *ic, char *who, char *message)
-{
-	GString *data = g_string_new("msg=");
-
-	g_string_append_escaped(data, message);
-
-	omegle_post(ic, who, "/send", data->str, omegle_http_dummy);
-
-	g_string_free(data, TRUE);
-}
+#include "omegle_http.c"
+#include "omegle_normal.c"
+#include "omegle_spy.c"
 
 static int omegle_send_typing(struct im_connection *ic, char *who, int typing)
 {
-	struct bee_user *bu = bee_user_by_handle( ic->bee, ic, who );
-	
-	if (!(bu->flags & BEE_USER_ONLINE))
-		return 0;
-
 	if (typing & OPT_TYPING) {
-		omegle_send(ic, who, "/typing");
+		omegle_normal_send(ic, who, "/typing");
 	} else {
-		omegle_send(ic, who, "/stoppedTyping");
+		omegle_normal_send(ic, who, "/stoppedTyping");
 	}
 
 	return 1;
-}
-
-static void omegle_convo_got_id(struct http_request *req)
-{
-	struct bee_user *bu = req->data;
-	struct omegle_buddy_data *bd = bu->data;
-	
-	if (req->status_code != 200)
-		goto error;
-
-	if (req->reply_body[0] != '"' || req->reply_body[strlen(req->reply_body) - 1] != '"')
-		goto error;
-
-	bd->session_id = g_strndup(req->reply_body + 1, strlen(req->reply_body) - 2);
-
-	return;
-
-error:
-	bd->disconnected = TRUE;
-}
-
-static void omegle_start_convo(struct im_connection *ic, char *who, char *host)
-{
-	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
-	struct omegle_buddy_data *bd = bu->data;
-	GString *url = g_string_new("/start");
-	GString *likes = g_string_new("");
-	GSList *l;
-
-	bd->host = host;
-
-	if (bd->likes) {
-		g_string_append(url, "?topics=");
-
-		g_string_append(likes, "[");
-
-		for (l = bd->likes; l; l = l->next) {
-			g_string_append_printf(likes, "\"%s\",", (char*) l->data);
-		}
-
-		g_string_truncate(likes, likes->len - 1);
-
-		g_string_append(likes, "]");
-
-		g_string_append_escaped(url, likes->str);
-	}
-
-	omegle_get(ic, who, host, url->str, omegle_convo_got_id);
-
-	g_string_free(url, TRUE);
-	g_string_free(likes, TRUE);
-}
-
-static void omegle_chose_server(struct http_request *req)
-{
-	struct bee_user *bu = req->data;
-	struct omegle_buddy_data *bd = bu->data;
-	struct im_connection *ic = bu->ic;
-	char *who = bu->handle;
-	json_error_t error;
-	json_t *root = NULL;
-	json_t *servers;
-	int length, i;
-	GRand* rand = NULL;
-
-	if (req->status_code != 200)
-		goto error;
-
-	if (!(root = json_loads(req->reply_body, 0, &error)))
-		goto error;
-
-	if (!(servers = json_object_get(root, "servers")))
-		goto error;
-
-	length = json_array_size(servers);
-	rand = g_rand_new();
-	i = g_rand_int_range(rand, 0, length);
-
-	if (!(json_string_value(json_array_get(servers, i))))
-		goto error;
-
-	omegle_start_convo(ic, who, g_strdup(json_string_value(json_array_get(servers, i))));
-
-	json_decref(root);
-	g_rand_free(rand);
-
-	return;
-
-error:
-	if (root) json_decref(root);
-	if (rand) g_rand_free(rand);
-
-	imcb_error(ic, "Could not fetch the server list, set one to use in the config");
-
-	bd->connecting = FALSE;
-}
-
-static void omegle_disconnect_happened(struct im_connection *ic, char *who)
-{
-	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
-	struct omegle_buddy_data *bd = bu->data;
-	account_t *acc = ic->acc;
-
-	if (set_getbool(&acc->set, "keep_online")) {
-		if (bu->flags & BEE_USER_AWAY)
-			imcb_error(ic, "Lookup for a stranger failed");
-
-		imcb_buddy_status(ic, who, BEE_USER_ONLINE | BEE_USER_AWAY, NULL, NULL);
-	} else {
-		if (!(bu->flags & BEE_USER_ONLINE))
-			imcb_error(ic, "Lookup for a stranger failed");
-
-		imcb_buddy_status(ic, who, 0, NULL, NULL);
-	}
-
-	if (bd->host) {
-		g_free(bd->host);
-		bd->host = NULL;
-	}
-
-	if (bd->session_id) {
-		g_free(bd->session_id);
-		bd->session_id = NULL;
-	}
-
-	if (bd->backlog) {
-		g_slist_free_full(bd->backlog, g_free);
-		bd->backlog = NULL;
-	}
-
-	bd->checking = FALSE;
-	bd->connecting = FALSE;
-	bd->disconnecting = FALSE;
-	bd->disconnected = FALSE;
-}
-
-static void omegle_disconnect_happened_http(struct http_request *req)
-{
-	struct bee_user *bu = req->data;
-	struct omegle_buddy_data *bd = bu->data;
-
-	bd->disconnected = TRUE;
-	bd->disconnecting = FALSE;
-}
-
-static void omegle_disconnect(struct im_connection *ic, char *who)
-{
-	struct bee_user *bu = bee_user_by_handle(ic->bee, ic, who);
-	struct omegle_buddy_data *bd = bu->data;
-
-	if (bd->disconnecting)
-		return;
-
-	bd->disconnecting = TRUE;
-
-	omegle_send_with_callback(ic, who, "/disconnect", omegle_disconnect_happened_http);
 }
 
 static void omegle_add_deny(struct im_connection *ic, char *who)
@@ -327,16 +83,16 @@ static void omegle_add_permit(struct im_connection *ic, char *who)
 	bd->connecting = TRUE;
 
 	if (host) {
-		omegle_start_convo(ic, who, g_strdup(host));
+		omegle_normal_start_convo(ic, who, g_strdup(host));
 	}
 	else {
-		omegle_get(ic, who, "omegle.com", "/status", omegle_chose_server);
+		omegle_get(bu, "omegle.com", "/status", omegle_normal_chose_server);
 	}
 }
 
 static void omegle_rem_permit(struct im_connection *ic, char *who)
 {
-	omegle_disconnect(ic, who);
+	omegle_normal_disconnect(ic, who);
 }
 
 static void omegle_buddy_data_add(bee_user_t *bu)
@@ -392,7 +148,7 @@ static void *omegle_buddy_action(struct bee_user *bu, const char *action, char *
 	} else if (!strcmp(action, "DISCONNECT")) {
 		omegle_rem_permit(bu->ic, bu->handle);
 	} else if (!strcmp(action, "LIKES")) {
-		if (!strcmp(*arg, "?")) {
+		if (*arg && !strcmp(*arg, "?")) {
 			if (!bd->likes)
 				return NULL;
 
@@ -419,7 +175,7 @@ static void *omegle_buddy_action(struct bee_user *bu, const char *action, char *
 		}
 	} else if (!strcmp(action, "RANDOM")) {
 		if (bd->session_id)
-			omegle_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
+			omegle_normal_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
 	}
 
 	return NULL;
@@ -450,7 +206,7 @@ static int omegle_buddy_msg(struct im_connection *ic, char *who, char *message, 
 
 		omegle_add_permit(ic, who);
 	} else {
-		omegle_send_message(ic, who, message);
+		omegle_normal_send_message(ic, who, message);
 	}
 
 	return 1;
@@ -486,107 +242,14 @@ static void omegle_init(account_t *acc)
 	s->flags |= ACC_SET_OFFLINE_ONLY;
 }
 
-static void omegle_handle_events(struct http_request *req)
-{
-	struct bee_user *bu = req->data;
-	struct omegle_buddy_data *bd = bu->data;
-	struct im_connection *ic = bu->ic;
-	json_error_t error;
-	json_t *root, *value;
-	int length, llength, i, j;
-	const char *name;
-	char **likes;
-	GSList *l;
-
-	if (req->status_code != 200) {
-		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
-
-		bd->disconnected = TRUE;
-		bd->connecting = FALSE;
-
-		return;
-	}
-
-	if (!(root = json_loads(req->reply_body, JSON_DECODE_ANY, &error))) {
-		imcb_error(ic, "Could not parse JSON: %s", error.text);
-		imcb_error(ic, "at %d:%d in:", error.line, error.column);
-		imcb_error(ic, "%s", req->reply_body);
-
-		bd->checking = FALSE;
-
-		return;
-	}
-
-	if (!json_is_array(root)) {
-		if (json_is_null(root))
-			bd->disconnected = TRUE;
-
-		goto end;
-	}
-
-	for (i = 0, length = json_array_size(root); i < length; i++) {
-		name  = json_string_value(json_array_get(json_array_get(root, i), 0));
-		value = json_array_get(json_array_get(root, i), 1);
-
-		if (!strcmp(name, "waiting")) {
-			likes = g_new0(char*, 1);
-
-			imcb_buddy_action_response(bu, "WAITING", likes, NULL);
-
-			g_free(likes);
-		} else if (!strcmp(name, "connected")) {
-			imcb_buddy_status(ic, bu->handle, BEE_USER_ONLINE, NULL, NULL);
-
-			for (l = bd->backlog; l; l = l->next) {
-				omegle_send_message(ic, bu->handle, l->data);
-			}
-
-			g_slist_free_full(bd->backlog, g_free);
-
-			bd->connecting = FALSE;
-			bd->backlog = NULL;
-		} else if (!strcmp(name, "commonLikes")) {
-			likes = g_new0(char*, json_array_size(value) + 1);
-
-			for (j = 0, llength = json_array_size(value); j < llength; j++) {
-				likes[j] = (char*) json_string_value(json_array_get(value, j));
-			}
-
-			imcb_buddy_action_response(bu, "LIKES", likes, NULL);
-
-			g_free(likes);
-		} else if (!strcmp(name, "count")) {
-			likes = g_new0(char*, 2);
-			likes[0] = g_strdup_printf("%" JSON_INTEGER_FORMAT, json_integer_value(value));
-
-			imcb_buddy_action_response(bu, "COUNT", likes, NULL);
-
-			g_free(likes[0]);
-			g_free(likes);
-		} else if (!strcmp(name, "typing")) {
-			imcb_buddy_typing(ic, bu->handle, OPT_TYPING);
-		} else if (!strcmp(name, "stoppedTyping")) {
-			imcb_buddy_typing(ic, bu->handle, 0);
-		} else if (!strcmp(name, "gotMessage")) {
-			imcb_buddy_typing(ic, bu->handle, 0);
-			imcb_buddy_msg(ic, bu->handle, (char*) json_string_value(value), 0, 0);
-		} else if (!strcmp(name, "strangerDisconnected")) {
-			bd->disconnected = TRUE;
-		}
-	}
-
-end:
-	bd->checking = FALSE;
-
-	json_decref(root);
-}
-
 gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 {
 	struct im_connection *ic = data;
 	account_t *acc = ic->acc;
 	struct bee_user *bu;
 	struct omegle_buddy_data *bd;
+	struct groupchat *gc;
+	struct omegle_groupchat_data *gd;
 	int number, i;
 	char *name, *prefix;
 	GSList *to_disconnect = NULL, *l;
@@ -638,17 +301,24 @@ gboolean omegle_main_loop(gpointer data, gint fd, b_input_condition cond)
 
 		bd->checking = TRUE;
 
-		omegle_send_with_callback(ic, bu->handle, "/events", omegle_handle_events);
+		omegle_normal_send_with_callback(ic, bu->handle, "/events", omegle_normal_handle_events);
 	}
 
 	for (l = to_disconnect; l; l = l->next) {
 		bu = l->data;
 		bd = bu->data;
 
-		omegle_disconnect_happened(bu->ic, bu->handle);
+		omegle_normal_disconnect_happened(bu->ic, bu->handle);
 	}
 
 	g_slist_free(to_disconnect);
+
+	for (l = ic->groupchats; l; l = l->next) {
+		gc = l->data;
+		gd = gc->data;
+
+//		omegle_send_with_callback(ic, gc, "/events", omegle_handle_spy_events);
+	}
 
 	return ic->flags & OPT_LOGGED_IN;
 }
