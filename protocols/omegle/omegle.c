@@ -230,9 +230,6 @@ static void omegle_init(account_t *acc)
 
 	s = set_add(&acc->set, "host", NULL, set_eval_account, acc);
 
-	s = set_add(&acc->set, "fetch_interval", "2", set_eval_int, acc);
-	s->flags |= ACC_SET_OFFLINE_ONLY;
-
 	s = set_add(&acc->set, "keep_online", "false", set_eval_bool, acc);
 
 	s = set_add(&acc->set, "auto_add_strangers", "1", set_eval_int, acc);
@@ -334,7 +331,9 @@ static void omegle_login(account_t *acc)
 	imcb_log(ic, "Connecting");
 	omegle_connections = g_slist_append(omegle_connections, ic);
 
-	od->main_loop_id = b_timeout_add(set_getint(&ic->acc->set, "fetch_interval") * 1000, omegle_main_loop, ic);
+	// this is not an option because events are long polled on the omegle's side
+	// so we don't really send a request every second
+	od->main_loop_id = b_timeout_add(1000, omegle_main_loop, ic);
 }
 
 void init_plugin(void)
