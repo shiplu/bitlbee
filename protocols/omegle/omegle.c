@@ -369,6 +369,7 @@ GList *omegle_buddy_action_list(bee_user_t *bu)
 			{ "CONNECT", "Connect to a Stranger" },
 			{ "DISCONNECT", "Disconnect from the Stranger" },
 			{ "LIKES", "Specify what the common topics to look for" },
+			{ "RANDOM", "Stop looking for common interests" },
 			{ NULL, NULL }
 		};
 		
@@ -398,9 +399,10 @@ static void *omegle_buddy_action(struct bee_user *bu, const char *action, char *
 			do {
 				bd->likes = g_slist_append(bd->likes, g_strdup(*arg));
 			} while (*++arg);
-		} else if (bd->session_id) {
-			omegle_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
 		}
+	} else if (!strcmp(action, "RANDOM")) {
+		if (bd->session_id)
+			omegle_send(bu->ic, bu->handle, "/stoplookingforcommonlikes");
 	}
 
 	return NULL;
