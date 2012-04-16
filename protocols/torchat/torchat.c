@@ -236,6 +236,17 @@ static void torchat_parse_list(struct im_connection *ic, char *address, char* li
 
 static void torchat_parse_message(struct im_connection *ic, char *address, char* line)
 {
+	if (!strcmp(line, "start")) {
+		imcb_buddy_typing(ic, address, OPT_TYPING);
+	} else if (!strcmp(line, "thinking")) {
+		imcb_buddy_typing(ic, address, OPT_THINKING);
+	} else {
+		imcb_buddy_typing(ic, address, 0);
+	}
+}
+
+static void torchat_parse_message(struct im_connection *ic, char *address, char* line)
+{
 	imcb_buddy_msg(ic, address, line, 0, 0);
 }
 
@@ -260,6 +271,7 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "NAME", torchat_parse_name },
 		{ "DESCRIPTION", torchat_parse_description },
 		{ "LIST", torchat_parse_list },
+		{ "TYPING", torchat_parse_typing },
 		{ "MESSAGE", torchat_parse_message }
 	};
 
@@ -316,6 +328,19 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	g_free(buf);
 
 	return TRUE;
+}
+
+static int torchat_send_typing(struct im_connection *ic, char *who, int typing)
+{
+	if (typing & OPT_TYPING) {
+		torchat_send(ic, "TYPING %s start", who);
+	} else if (typing & OPT_THINKING) {
+		torchat_send(ic, "TYPING %s thinking", who);
+	} else {
+		torchat_send(ic, "TYPING %s stop", who);
+	}
+
+	return 1;
 }
 
 static void torchat_add_deny(struct im_connection *ic, char *who)
@@ -598,6 +623,7 @@ void init_plugin(void)
 	ret->rem_permit = torchat_rem_permit;
 	ret->add_deny = torchat_add_deny;
 	ret->rem_deny = torchat_rem_deny;
+	ret->send_typing = torchat_send_typing;
 
 	register_protocol(ret);
 }
