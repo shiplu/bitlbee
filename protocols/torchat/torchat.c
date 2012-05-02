@@ -57,6 +57,10 @@ struct torchat_buddy_data {
 	} client;
 };
 
+struct torchat_groupchat_data {
+	char* id;
+};
+
 typedef void (*torchat_parser)(struct im_connection *ic, char *address, char *line);
 
 static gboolean torchat_valid_address (char* test)
@@ -123,6 +127,42 @@ static int torchat_send(struct im_connection *ic, char *fmt, ...)
 	g_free(str);
 
 	return st;
+}
+
+static void torchat_parse_groupchat_create(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_invite(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_join(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_joined(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_participants(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_leave(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_left(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_message(struct im_connection *ic, char *address, char* line)
+{
+}
+
+static void torchat_parse_groupchat_destroy(struct im_connection *ic, char *address, char* line)
+{
 }
 
 static void torchat_parse_authorized(struct im_connection *ic, char *address, char* line)
@@ -234,7 +274,7 @@ static void torchat_parse_list(struct im_connection *ic, char *address, char* li
 	g_strfreev(ids);
 }
 
-static void torchat_parse_message(struct im_connection *ic, char *address, char* line)
+static void torchat_parse_typing(struct im_connection *ic, char *address, char* line)
 {
 	if (!strcmp(line, "start")) {
 		imcb_buddy_typing(ic, address, OPT_TYPING);
@@ -272,7 +312,17 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "DESCRIPTION", torchat_parse_description },
 		{ "LIST", torchat_parse_list },
 		{ "TYPING", torchat_parse_typing },
-		{ "MESSAGE", torchat_parse_message }
+		{ "MESSAGE", torchat_parse_message },
+
+		{ "GROUPCHAT_CREATE", torchat_parse_groupchat_create },
+		{ "GROUPCHAT_INVITE", torchat_parse_groupchat_invite },
+		{ "GROUPCHAT_JOIN", torchat_parse_groupchat_join },
+		{ "GROUPCHAT_JOINED", torchat_parse_groupchat_joined },
+		{ "GROUPCHAT_PARTICIPANTS", torchat_parse_groupchat_participants },
+		{ "GROUPCHAT_LEAVE", torchat_parse_groupchat_leave },
+		{ "GROUPCHAT_LEFT", torchat_parse_groupchat_left },
+		{ "GROUPCHAT_MESSAGE", torchat_parse_groupchat_message },
+		{ "GROUPCHAT_DESTROY", torchat_parse_groupchat_destroy }
 	};
 
 	if (!td || !td->ssl || td->fd == -1)
@@ -330,6 +380,32 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	return TRUE;
 }
 
+static void torchat_chat_msg(struct groupchat *c, char *message, int flags)
+{
+}
+
+static void torchat_chat_invite(struct groupchat *c, char *who, char *message)
+{
+	struct im_connection *ic = c->ic;
+
+}
+
+static void torchat_chat_leave(struct groupchat *c)
+{
+}
+
+static struct groupchat *torchat_chat_with(struct im_connection *ic, char *who)
+{
+	return NULL;
+}
+
+struct groupchat *torchat_chat_join(struct im_connection *ic, const char *room, const char *nick, const char *password, set_t **sets)
+{
+	struct groupchat *gc = imcb_chat_new(ic, room)
+
+	return NULL;
+}
+
 static int torchat_send_typing(struct im_connection *ic, char *who, int typing)
 {
 	if (typing & OPT_TYPING) {
@@ -379,7 +455,7 @@ static void torchat_buddy_data_free(bee_user_t *bu)
 	g_free(bd);
 }
 
-GList *torchat_buddy_action_list(bee_user_t *bu)
+static GList *torchat_buddy_action_list(bee_user_t *bu)
 {
 	static GList *ret = NULL;
 	
@@ -457,13 +533,13 @@ static void torchat_get_info(struct im_connection *ic, char *who)
 	struct torchat_buddy_data *bd = bu->data;
 
 	if (bd->client.name)
-		imcb_log(ic, "%s - client is %s %s", who, bd->client.name, bd->client.version);
+		imcb_log(ic, "%s - client - %s %s", who, bd->client.name, bd->client.version);
 
 	if (bu->fullname)
-		imcb_log(ic, "%s - name is `%s'", who, bu->fullname);
+		imcb_log(ic, "%s - name - %s", who, bu->fullname);
 
 	if (bu->status_msg)
-		imcb_log(ic, "%s - description is `%s'", who, bu->status_msg);
+		imcb_log(ic, "%s - description - %s", who, bu->status_msg);
 }
 
 static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message, int flags)
@@ -624,6 +700,11 @@ void init_plugin(void)
 	ret->add_deny = torchat_add_deny;
 	ret->rem_deny = torchat_rem_deny;
 	ret->send_typing = torchat_send_typing;
+	ret->chat_msg = torchat_chat_msg;
+	ret->chat_invite = torchat_chat_invite;
+	ret->chat_leave = torchat_chat_leave;
+	ret->chat_with = torchat_chat_with;
+	ret->chat_join = torchat_chat_join;
 
 	register_protocol(ret);
 }
