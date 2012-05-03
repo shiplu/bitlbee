@@ -169,6 +169,22 @@ static void torchat_parse_groupchat_destroy(struct im_connection *ic, char *addr
 {
 }
 
+static void torchat_parse_broadcast(struct im_connection *ic, char *address, char* line)
+{
+	imcb_buddy_msg(ic, "broadcast", line, 0, 0);
+}
+
+static void torchat_parse_typing(struct im_connection *ic, char *address, char* line)
+{
+	if (!strcmp(line, "start")) {
+		imcb_buddy_typing(ic, address, OPT_TYPING);
+	} else if (!strcmp(line, "thinking")) {
+		imcb_buddy_typing(ic, address, OPT_THINKING);
+	} else {
+		imcb_buddy_typing(ic, address, 0);
+	}
+}
+
 static void torchat_parse_authorized(struct im_connection *ic, char *address, char* line)
 {
 	struct torchat_data *td = ic->proto_data;
@@ -278,17 +294,6 @@ static void torchat_parse_list(struct im_connection *ic, char *address, char* li
 	g_strfreev(ids);
 }
 
-static void torchat_parse_typing(struct im_connection *ic, char *address, char* line)
-{
-	if (!strcmp(line, "start")) {
-		imcb_buddy_typing(ic, address, OPT_TYPING);
-	} else if (!strcmp(line, "thinking")) {
-		imcb_buddy_typing(ic, address, OPT_THINKING);
-	} else {
-		imcb_buddy_typing(ic, address, 0);
-	}
-}
-
 static void torchat_parse_message(struct im_connection *ic, char *address, char* line)
 {
 	imcb_buddy_msg(ic, address, line, 0, 0);
@@ -315,8 +320,11 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "NAME", torchat_parse_name },
 		{ "DESCRIPTION", torchat_parse_description },
 		{ "LIST", torchat_parse_list },
-		{ "TYPING", torchat_parse_typing },
 		{ "MESSAGE", torchat_parse_message },
+
+		{ "TYPING", torchat_parse_typing },
+
+		{ "BROADCAST", torchat_parse_broadcast },
 
 		{ "GROUPCHAT_CREATE", torchat_parse_groupchat_create },
 		{ "GROUPCHAT_INVITE", torchat_parse_groupchat_invite },
