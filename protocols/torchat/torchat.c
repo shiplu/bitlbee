@@ -34,18 +34,22 @@
 #define TORCHAT_DEFAULT_SERVER "localhost"
 #define TORCHAT_DEFAULT_PORT   "11110"
 
-#define ARRAY_SIZE(x) (sizeof(x)/sizeof(x[0]))
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(x[0]))
 
 struct torchat_data {
 	struct im_connection *ic;
+
 	/* The onion ID of the current account */
 	char* id;
+
 	/* The effective file descriptor. We store it here so any function can
 	 * write() to it. */
 	int fd;
+
 	/* File descriptor returned by bitlbee. we store it so we know when
 	 * we're connected and when we aren't. */
 	int bfd;
+
 	/* ssl_getfd() uses this to get the file descriptor. */
 	void *ssl;
 };
