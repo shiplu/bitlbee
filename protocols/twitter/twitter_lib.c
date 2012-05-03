@@ -293,7 +293,10 @@ static void twitter_http_get_friends_ids(struct http_request *req)
 	// Parse the data.
 	parser = xt_new(NULL, txl);
 	xt_feed(parser, req->reply_body, req->body_size);
-	twitter_xt_get_friends_id_list(parser->root, txl);
+
+	if (parser->root)
+		twitter_xt_get_friends_id_list(parser->root, txl);
+
 	xt_free(parser);
 
 	td->follow_ids = txl->list;
@@ -380,7 +383,9 @@ static void twitter_http_get_users_lookup(struct http_request *req)
 	xt_feed(parser, req->reply_body, req->body_size);
 
 	// Get the user list from the parsed xml feed.
-	twitter_xt_get_users(parser->root, txl);
+	if (parser->root)
+		twitter_xt_get_users(parser->root, txl);
+
 	xt_free(parser);
 
 	// Add the users as buddies.
@@ -907,8 +912,11 @@ static void twitter_http_get_home_timeline(struct http_request *req)
 	// Parse the data.
 	parser = xt_new(NULL, txl);
 	xt_feed(parser, req->reply_body, req->body_size);
+
 	// The root <statuses> node should hold the list of statuses <status>
-	twitter_xt_get_status_list(ic, parser->root, txl);
+	if (parser->root)
+		twitter_xt_get_status_list(ic, parser->root, txl);
+
 	xt_free(parser);
 
 	td->home_timeline_obj = txl;
@@ -955,13 +963,16 @@ static void twitter_http_get_mentions(struct http_request *req)
 	// Parse the data.
 	parser = xt_new(NULL, txl);
 	xt_feed(parser, req->reply_body, req->body_size);
+
 	// The root <statuses> node should hold the list of statuses <status>
-	twitter_xt_get_status_list(ic, parser->root, txl);
+	if (parser->root)
+		twitter_xt_get_status_list(ic, parser->root, txl);
+
 	xt_free(parser);
 
 	td->mentions_obj = txl;
 
-      end:
+end:
 	td->flags |= TWITTER_GOT_MENTIONS;
 
 	twitter_flush_timeline(ic);
