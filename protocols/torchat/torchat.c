@@ -322,10 +322,13 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "LIST", torchat_parse_list },
 		{ "MESSAGE", torchat_parse_message },
 
+		// typing extension
 		{ "TYPING", torchat_parse_typing },
 
+		// broadcast extension
 		{ "BROADCAST", torchat_parse_broadcast },
 
+		// groupchat extension
 		{ "GROUPCHAT_CREATE", torchat_parse_groupchat_create },
 		{ "GROUPCHAT_INVITE", torchat_parse_groupchat_invite },
 		{ "GROUPCHAT_JOIN", torchat_parse_groupchat_join },
