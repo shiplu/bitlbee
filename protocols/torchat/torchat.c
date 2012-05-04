@@ -176,7 +176,7 @@ static void torchat_parse_groupchat_invite(struct im_connection *ic, char *addre
 
 static void torchat_parse_groupchat_join(struct im_connection *ic, char *address, char* line)
 {
-	char *id = g_strndup(line, strchr(line, ' ') - line);
+	char *id = strchr(line, ' ') ? g_strndup(line, strchr(line, ' ') - line) : g_strdup(line);
 	struct groupchat *gc = torchat_find_groupchat(ic, id);
 
 	if (!gc)
@@ -216,8 +216,8 @@ cleanup:
 
 static void torchat_parse_groupchat_leave(struct im_connection *ic, char *address, char* line)
 {
-	char *id = g_strndup(line, strchr(line, ' ') - line);
-	char *message = g_strdup(strchr(line, ' ') + 1);
+	char *id = strchr(line, ' ') ? g_strndup(line, strchr(line, ' ') - line) : g_strdup(line);
+	char *message = strchr(line, ' ') ? g_strdup(strchr(line, ' ') + 1) : NULL;
 	struct groupchat *gc = torchat_find_groupchat(ic, id);
 
 	if (!gc)
@@ -227,7 +227,9 @@ static void torchat_parse_groupchat_leave(struct im_connection *ic, char *addres
 
 cleanup:
 	g_free(id);
-	g_free(message);
+
+	if (message)
+		g_free(message);
 }
 
 static void torchat_parse_groupchat_left(struct im_connection *ic, char *address, char* line)
