@@ -52,6 +52,9 @@ struct torchat_data {
 
 	/* ssl_getfd() uses this to get the file descriptor. */
 	void *ssl;
+
+	/* the next groupchat to be assigned an id */
+	struct groupchat *created_groupchat;
 };
 
 struct torchat_buddy_data {
@@ -133,8 +136,38 @@ static int torchat_send(struct im_connection *ic, char *fmt, ...)
 	return st;
 }
 
+static struct groupchat *torchat_find_groupchat(struct im_connection *ic, char *id)
+{
+	struct groupchat *gc;
+	struct torchat_groupchat_data *gcd;
+	GSList *l;
+
+	for (l = ic->groupchats; l; l = l->next) {
+		gc = l->data;
+		gcd = gc->data;
+
+		if (!strcmp(gcd->id, id))
+			return gc;
+	}
+
+	return NULL;
+}
+
 static void torchat_parse_groupchat_create(struct im_connection *ic, char *address, char* line)
 {
+	struct torchat_data *td = ic->proto_data;
+	struct groupchat *gc = td->created_groupchat;
+	struct torchat_groupchat_data *gcd;
+
+	if (!gc) {
+		gc = imcb_chat_new(ic, NULL);
+		gc->data = g_new0(struct torchat_groupchat_data, 1);
+	}
+
+	gcd = gc->data;
+	gcd->id = g_strdup(line);
+
+	td->created_groupchat = NULL;
 }
 
 static void torchat_parse_groupchat_invite(struct im_connection *ic, char *address, char* line)
@@ -143,6 +176,16 @@ static void torchat_parse_groupchat_invite(struct im_connection *ic, char *addre
 
 static void torchat_parse_groupchat_join(struct im_connection *ic, char *address, char* line)
 {
+	char *id = g_strndup(line, strchr(line, ' ') - line);
+	struct groupchat *gc = torchat_find_groupchat(ic, id);
+
+	if (!gc)
+		goto cleanup;
+
+	imcb_chat_add_buddy(gc, address);
+
+cleanup:
+	g_free(id);
 }
 
 static void torchat_parse_groupchat_joined(struct im_connection *ic, char *address, char* line)
@@ -151,10 +194,40 @@ static void torchat_parse_groupchat_joined(struct im_connection *ic, char *addre
 
 static void torchat_parse_groupchat_participants(struct im_connection *ic, char *address, char* line)
 {
+	char *id = g_strndup(line, strchr(line, ' ') - line);
+	char *message = g_strdup(strchr(line, ' ') + 1);
+	struct groupchat *gc = torchat_find_groupchat(ic, id);
+	char **participants, **participantptr, *participant;
+
+	if (!gc)
+		goto cleanup;
+
+	participantptr = participants = g_strsplit(message, " ", 0);
+
+	while ((participant = *participantptr++))
+		imcb_chat_add_buddy(gc, participant);
+
+	g_strfreev(participants);
+
+cleanup:
+	g_free(id);
+	g_free(message);
 }
 
 static void torchat_parse_groupchat_leave(struct im_connection *ic, char *address, char* line)
 {
+	char *id = g_strndup(line, strchr(line, ' ') - line);
+	char *message = g_strdup(strchr(line, ' ') + 1);
+	struct groupchat *gc = torchat_find_groupchat(ic, id);
+
+	if (!gc)
+		goto cleanup;
+
+	imcb_chat_remove_buddy(gc, address, message);
+
+cleanup:
+	g_free(id);
+	g_free(message);
 }
 
 static void torchat_parse_groupchat_left(struct im_connection *ic, char *address, char* line)
@@ -163,10 +236,36 @@ static void torchat_parse_groupchat_left(struct im_connection *ic, char *address
 
 static void torchat_parse_groupchat_message(struct im_connection *ic, char *address, char* line)
 {
+	char *id = g_strndup(line, strchr(line, ' ') - line);
+	char *message = g_strdup(strchr(line, ' ') + 1);
+	struct groupchat *gc = torchat_find_groupchat(ic, id);
+
+	if (!gc)
+		goto cleanup;
+
+	imcb_chat_msg(gc, address, message, 0, 0);
+
+cleanup:
+	g_free(id);
+	g_free(message);
 }
 
 static void torchat_parse_groupchat_destroy(struct im_connection *ic, char *address, char* line)
 {
+	char *id = g_strndup(line, strchr(line, ' ') - line);
+	struct groupchat *gc = torchat_find_groupchat(ic, id);
+	struct torchat_groupchat_data *gcd = gc->data;
+
+	if (!gc)
+		goto cleanup;
+
+	g_free(gcd->id);
+	g_free(gcd);
+
+	imcb_chat_free(gc);
+
+cleanup:
+	g_free(id);
 }
 
 static void torchat_parse_broadcast(struct im_connection *ic, char *address, char* line)
@@ -395,30 +494,69 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 	return TRUE;
 }
 
-static void torchat_chat_msg(struct groupchat *c, char *message, int flags)
+static void torchat_chat_msg(struct groupchat *gc, char *message, int flags)
 {
+	struct im_connection *ic = gc->ic;
+	struct torchat_groupchat_data *gcd = gc->data;
+	char **lines, **lineptr, *line;
+
+	if (!gcd->id)
+		return;
+
+	lineptr = lines = g_strsplit(message, "\n", 0);
+
+	while ((line = *lineptr++))
+		torchat_send(ic, "GROUPCHAT_MESSAGE %s %s", gcd->id, line);
+
+	g_strfreev(lines);
 }
 
-static void torchat_chat_invite(struct groupchat *c, char *who, char *message)
+static void torchat_chat_invite(struct groupchat *gc, char *who, char *message)
 {
-	struct im_connection *ic = c->ic;
+	struct im_connection *ic = gc->ic;
+	struct torchat_data *td = ic->proto_data;
+	struct torchat_groupchat_data *gcd = gc->data;
 
+	if (!gcd->id) {
+		td->created_groupchat = gc;
+
+		torchat_send(ic, "GROUPCHAT_INVITE %s", who);
+	} else {
+		torchat_send(ic, "GROUPCHAT_INVITE %s %s", gcd->id, who);
+	}
 }
 
-static void torchat_chat_leave(struct groupchat *c)
+static void torchat_chat_leave(struct groupchat *gc)
 {
+	struct im_connection *ic = gc->ic;
+	struct torchat_groupchat_data *gcd = gc->data;
+
+	if (!gcd->id)
+		return;
+
+	torchat_send(ic, "GROUPCHAT_LEAVE %s", gcd->id);
 }
 
 static struct groupchat *torchat_chat_with(struct im_connection *ic, char *who)
 {
-	return NULL;
+	struct torchat_data *td = ic->proto_data;
+	struct groupchat *gc = imcb_chat_new(ic, who);
+
+	td->created_groupchat = gc;
+	gc->data = g_new0(struct torchat_groupchat_data, 1);
+
+	torchat_send(ic, "GROUPCHAT_INVITE %s", who);
+
+	return gc;
 }
 
 struct groupchat *torchat_chat_join(struct im_connection *ic, const char *room, const char *nick, const char *password, set_t **sets)
 {
-	struct groupchat *gc = imcb_chat_new(ic, room)
+	struct groupchat *gc = imcb_chat_new(ic, room);
 
-	return NULL;
+	gc->data = g_new0(struct torchat_groupchat_data, 1);
+
+	return gc;
 }
 
 static int torchat_send_typing(struct im_connection *ic, char *who, int typing)
@@ -575,6 +713,8 @@ static int torchat_buddy_msg(struct im_connection *ic, char *who, char *message,
 static void torchat_logout(struct im_connection *ic)
 {
 	struct torchat_data *td = ic->proto_data;
+	struct groupchat *gc;
+	struct torchat_groupchat_data *gcd;
 
 	torchat_send(ic, "STATUS offline");
 	
@@ -585,6 +725,16 @@ static void torchat_logout(struct im_connection *ic)
 		ssl_disconnect(td->ssl);
 
 	g_free(td);
+
+	while (ic->groupchats) {
+		gc = ic->groupchats->data;
+		gcd = gc->data;
+
+		g_free(gcd->id);
+		g_free(gcd);
+
+		imcb_chat_free(gc);
+	}
 
 	ic->proto_data = NULL;
 }
