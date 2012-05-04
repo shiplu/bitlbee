@@ -55,6 +55,9 @@ struct torchat_data {
 
 	/* the next groupchat to be assigned an id */
 	struct groupchat *created_groupchat;
+
+	/* groupchat for broadcasts */
+	struct groupchat *broadcasts;
 };
 
 struct torchat_buddy_data {
@@ -268,7 +271,11 @@ static void torchat_parse_groupchat_destroy(struct im_connection *ic, char *addr
 
 static void torchat_parse_broadcast(struct im_connection *ic, char *address, char* line)
 {
-	imcb_buddy_msg(ic, "broadcast", line, 0, 0);
+	struct torchat_data *td = ic->proto_data;
+	struct groupchat *gc = td->broadcasts;
+
+	if (gc)
+		imcb_chat_msg(gc, "Anonymous", line, 0, 0);
 }
 
 static void torchat_parse_typing(struct im_connection *ic, char *address, char* line)
@@ -286,6 +293,7 @@ static void torchat_parse_authorized(struct im_connection *ic, char *address, ch
 {
 	struct torchat_data *td = ic->proto_data;
 	account_t *acc = ic->acc;
+	char *name_hint;
 
 	if (line && *line) {
 		if (td->id) {
@@ -305,6 +313,18 @@ static void torchat_parse_authorized(struct im_connection *ic, char *address, ch
 		torchat_send(ic, "NAME %s", set_getstr(&acc->set, "display_name"));
 
 	imcb_connected(ic);
+
+	if (set_getbool(&acc->set, "broadcasts")) {
+		td->broadcasts = imcb_chat_new(ic, "broadcasts");
+
+		name_hint = g_strdup_printf("broadcasts_%s", ic->acc->user);
+		imcb_chat_name_hint(td->broadcasts, name_hint);
+		g_free(name_hint);
+
+		imcb_chat_topic(td->broadcasts, "Anonymous", "In this channel you can receive and send broadcasts through the torchat network", 0);
+		imcb_chat_add_buddy(td->broadcasts, "Anonymous");
+		imcb_chat_add_buddy(td->broadcasts, ic->acc->user);
+	}
 }
 
 static void torchat_parse_connected(struct im_connection *ic, char *address, char* line)
@@ -498,15 +518,19 @@ static void torchat_chat_msg(struct groupchat *gc, char *message, int flags)
 	struct torchat_groupchat_data *gcd = gc->data;
 	char **lines, **lineptr, *line;
 
-	if (!gcd->id)
-		return;
+	if (!strcmp(gc->title, "broadcasts")) {
+		torchat_send(ic, "BROADCAST %s", message);
+	} else {
+		if (!gcd->id)
+			return;
 
-	lineptr = lines = g_strsplit(message, "\n", 0);
+		lineptr = lines = g_strsplit(message, "\n", 0);
 
-	while ((line = *lineptr++))
-		torchat_send(ic, "GROUPCHAT_MESSAGE %s %s", gcd->id, line);
+		while ((line = *lineptr++))
+			torchat_send(ic, "GROUPCHAT_MESSAGE %s %s", gcd->id, line);
 
-	g_strfreev(lines);
+		g_strfreev(lines);
+	}
 }
 
 static void torchat_chat_invite(struct groupchat *gc, char *who, char *message)
@@ -728,8 +752,12 @@ static void torchat_logout(struct im_connection *ic)
 		gc = ic->groupchats->data;
 		gcd = gc->data;
 
-		g_free(gcd->id);
-		g_free(gcd);
+		if (gcd) {
+			if (gcd->id)
+				g_free(gcd->id);
+
+			g_free(gcd);
+		}
 
 		imcb_chat_free(gc);
 	}
@@ -835,6 +863,9 @@ static void torchat_init(account_t *acc)
 	s->flags |= ACC_SET_NOSAVE;
 
 	s = set_add(&acc->set, "display_name", NULL, torchat_set_display_name, acc);
+
+	s = set_add(&acc->set, "broadcasts", "false", set_eval_bool, acc);
+	s->flags |= ACC_SET_OFFLINE_ONLY;
 
 	acc->flags |= ACC_FLAG_AWAY_MESSAGE | ACC_FLAG_STATUS_MESSAGE;
 }
