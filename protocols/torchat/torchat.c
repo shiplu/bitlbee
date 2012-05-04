@@ -165,6 +165,8 @@ static void torchat_parse_groupchat_create(struct im_connection *ic, char *addre
 	if (!gc) {
 		gc = imcb_chat_new(ic, NULL);
 		gc->data = g_new0(struct torchat_groupchat_data, 1);
+
+		imcb_chat_add_buddy(gc, ic->acc->user);
 	}
 
 	gcd = gc->data;
