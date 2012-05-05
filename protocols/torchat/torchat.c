@@ -128,6 +128,9 @@ static int torchat_send(struct im_connection *ic, char *fmt, ...)
 	g_vasprintf(&str, fmt, args);
 	va_end(args);
 
+	if (getenv("TORCHAT_DEBUG"))
+		fprintf(stderr, ">> %s\n", str);
+
 	length = strlen(str);
 	
 	str[length] = '\n';
@@ -149,6 +152,9 @@ static struct groupchat *torchat_find_groupchat(struct im_connection *ic, char *
 		gc = l->data;
 		gcd = gc->data;
 
+		if (!gcd || !gcd->id)
+			continue;
+
 		if (!strcmp(gcd->id, id))
 			return gc;
 	}
@@ -163,7 +169,7 @@ static void torchat_parse_groupchat_create(struct im_connection *ic, char *addre
 	struct torchat_groupchat_data *gcd;
 
 	if (!gc) {
-		gc = imcb_chat_new(ic, NULL);
+		gc = imcb_chat_new(ic, line);
 		gc->data = g_new0(struct torchat_groupchat_data, 1);
 
 		imcb_chat_add_buddy(gc, ic->acc->user);
@@ -474,6 +480,9 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		lineptr = lines = g_strsplit(buf, "\n", 0);
 
 		while ((line = *lineptr++) && strlen(line)) {
+			if (getenv("TORCHAT_DEBUG"))
+				fprintf(stderr, "<< %s\n", line);
+
 			tmp = NULL;
 
 			if (strchr(line, ' ') && torchat_valid_address(tmp = g_strndup(line, strchr(line, ' ') - line))) {
