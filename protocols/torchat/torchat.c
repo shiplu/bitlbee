@@ -266,10 +266,12 @@ cleanup:
 static void torchat_parse_groupchat_destroy(struct im_connection *ic, char *address, char* line)
 {
 	struct groupchat *gc = torchat_find_groupchat(ic, line);
-	struct torchat_groupchat_data *gcd = gc->data;
+	struct torchat_groupchat_data *gcd;
 
 	if (!gc)
 		return;
+
+	gcd = gc->data;
 
 	g_free(gcd->id);
 	g_free(gcd);
