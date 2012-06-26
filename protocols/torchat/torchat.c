@@ -162,6 +162,29 @@ static struct groupchat *torchat_find_groupchat(struct im_connection *ic, char *
 	return NULL;
 }
 
+static void torchat_parse_latency(struct im_connection *ic, char *address, char* line)
+{
+	bee_user_t *bu = bee_user_by_handle(ic->bee, ic, address);
+	int size = 1;
+	char** argv = g_realloc_n(NULL, size, sizeof(char*));
+
+	char **pieces, **pieceptr, *piece;
+
+	pieceptr = pieces = g_strsplit(line, " ", 0);
+
+	while ((piece = *pieceptr++) && strlen(piece)) {
+		argv = g_realloc_n(argv, ++size, sizeof(char*));
+		argv[size - 2] = piece;
+	}
+
+	argv[size - 1] = 0;
+
+	imcb_buddy_action_response(bu, "PING", argv, NULL);
+
+	g_free(argv);
+	g_strfreev(pieces);
+}
+
 static void torchat_parse_groupchat_create(struct im_connection *ic, char *address, char* line)
 {
 	struct torchat_data *td = ic->proto_data;
@@ -464,7 +487,10 @@ static gboolean torchat_read_callback(gpointer data, gint fd, b_input_condition 
 		{ "GROUPCHAT_LEAVE", torchat_parse_groupchat_leave },
 		{ "GROUPCHAT_LEFT", torchat_parse_groupchat_left },
 		{ "GROUPCHAT_MESSAGE", torchat_parse_groupchat_message },
-		{ "GROUPCHAT_DESTROY", torchat_parse_groupchat_destroy }
+		{ "GROUPCHAT_DESTROY", torchat_parse_groupchat_destroy },
+
+		// latency extension
+		{ "LATENCY", torchat_parse_latency }
 	};
 
 	if (!td || !td->ssl || td->fd == -1)
@@ -650,6 +676,7 @@ static GList *torchat_buddy_action_list(bee_user_t *bu)
 	if (ret == NULL) {
 		static const struct buddy_action ba[] = {
 			{ "VERSION", "Get the client the buddy is using" },
+			{ "PING",    "Get the client latency" },
 			{ NULL, NULL }
 		};
 		
@@ -662,6 +689,7 @@ static GList *torchat_buddy_action_list(bee_user_t *bu)
 static void *torchat_buddy_action(struct bee_user *bu, const char *action, char * const args[], void *data)
 {
 	struct torchat_buddy_data *bd = bu->data;
+	struct im_connection *ic = bu->ic;
 
 	if (!strcmp(action, "VERSION") && bd->client.name) {
 		char *tmp = g_strdup_printf("%s %s", bd->client.name, bd->client.version);
@@ -670,6 +698,19 @@ static void *torchat_buddy_action(struct bee_user *bu, const char *action, char 
 		imcb_buddy_action_response(bu, action, argv, NULL);
 
 		g_free(tmp);
+	}
+	else if (!strcmp(action, "PING")) {
+		char **arg = args;
+		GString *string = g_string_new(NULL);
+
+		while (*arg) {
+			string = g_string_append(string, " ");
+			string = g_string_append(string, *arg);
+
+			arg = arg + 1;
+		}
+
+		torchat_send(ic, "LATENCY %s %s", bu->handle, string->str + 1);
 	}
 
 	return NULL;
