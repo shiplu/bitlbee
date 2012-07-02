@@ -217,6 +217,12 @@ static void omegle_normal_handle_events(struct http_request *req)
 	char **likes;
 	GSList *l;
 
+	if (req->status_code == 0) {
+		bd->checking = FALSE;
+
+		return;
+	}
+
 	if (req->status_code != 200) {
 		imcb_error(ic, "Got an HTTP error: %d", req->status_code);
 
