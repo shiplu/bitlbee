@@ -36,7 +36,7 @@ typedef enum {
 	                       used for the exact error message */
 } storage_status_t;
 
-typedef struct {
+typedef struct storage{
 	const char *name;
 	
 	/* May be set to NULL if not required */
