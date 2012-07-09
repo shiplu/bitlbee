@@ -29,6 +29,7 @@ oscar=1
 yahoo=1
 twitter=1
 purple=0
+mysql=0
 
 debug=0
 strip=1
@@ -76,7 +77,8 @@ Option		Description				Default
 
 --purple=0/1	Disable/enable libpurple support	$purple
 		(automatically disables other protocol modules)
-
+--mysql=0/1	Disable/enable mysql storage engine	$mysql
+		
 --debug=0/1	Disable/enable debugging		$debug
 --strip=0/1	Disable/enable binary stripping		$strip
 --gcov=0/1	Disable/enable test coverage reporting	$gcov
@@ -654,6 +656,23 @@ EOF
 	fi
 fi
 
+if [ "$mysql" = 0 ]; then
+	echo '#undef WITH_MYSQL' >> config.h
+else
+	if mysql_config > /dev/null 2>&1; then
+		echo
+		echo 'Cannot find mysql client development libraries, aborting. (Install libmysqlclient-dev?)'
+		exit 1
+	fi
+	echo '#define WITH_MYSQL' >> config.h
+	cat<<EOF>>Makefile.settings
+EFLAGS += $(mysql_config --libs)
+CFLAGS += $(mysql_config --cflags)
+EOF
+
+fi
+
+
 case "$CC" in
 *gcc* )
 	echo CFLAGS+=-MMD -MF .depend/\$@.d >> Makefile.settings
@@ -773,6 +792,10 @@ if [ -n "$systemdsystemunitdir" ]; then
 	echo '  systemd enabled.'
 else
 	echo '  systemd disabled.'
+fi
+
+if [ "$mysql" = "1" ]; then
+	echo '  MySQL storage enabled.'
 fi
 
 echo '  Using event handler: '$events
