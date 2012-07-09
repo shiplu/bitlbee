@@ -67,6 +67,13 @@ conf_t *conf_load( int argc, char *argv[] )
 	conf->ft_listen = NULL;
 	conf->protocols = NULL;
 	conf->cafile = NULL;
+	conf->storage = "xml";
+	conf->dbhost = NULL;
+	conf->dbport = 3306;
+	conf->dbuser = NULL;
+	conf->dbpass = NULL;
+	conf->dbname = NULL;
+	
 	proxytype = 0;
 	
 	i = conf_loadini( conf, global.conf_file );
@@ -82,7 +89,7 @@ conf_t *conf_load( int argc, char *argv[] )
 		   at a *valid* configuration file. */
 	}
 	
-	while( argc > 0 && ( opt = getopt( argc, argv, "i:p:P:nvIDFc:d:hu:V" ) ) >= 0 )
+	while( argc > 0 && ( opt = getopt( argc, argv, "i:p:P:nvIDFc:s:d:hu:V" ) ) >= 0 )
 	/*     ^^^^ Just to make sure we skip this step from the REHASH handler. */
 	{
 		if( opt == 'i' )
@@ -148,6 +155,7 @@ conf_t *conf_load( int argc, char *argv[] )
 			        "  -c  Load alternative configuration file\n"
 			        "  -d  Specify alternative user configuration directory\n"
 			        "  -x  Command-line interface to password encryption/hashing\n"
+				"  -s  Storage engine to use (MySQL or XML)\n"
 			        "  -h  Show this help page.\n"
 			        "  -V  Show version info.\n" );
 			return NULL;
@@ -162,6 +170,10 @@ conf_t *conf_load( int argc, char *argv[] )
 		{
 			g_free( conf->user );
 			conf->user = g_strdup( optarg );
+		}else if( opt == "s" )
+		{
+			g_free( conf->storage );
+			conf->storage = g_strdup( optarg );
 		}
 	}
 	
@@ -352,6 +364,35 @@ static int conf_loadini( conf_t *conf, char *file )
 			{
 				g_free( conf->cafile );
 				conf->cafile = g_strdup( ini->value );
+			}else if( g_strcasecmp( ini->key, "storage" ) == 0 )
+			{
+				g_free( conf->storage );
+				conf->storage = g_strdup( ini->value );
+			}
+			else if( g_strcasecmp( ini->key, "dbhost" ) == 0 )
+			{
+				g_free( conf->dbhost );
+				conf->dbhost = g_strdup( ini->value );
+			}
+			else if( g_strcasecmp( ini->key, "dbport" ) == 0 )
+			{
+				g_free( conf->dbport );
+				conf->dbport = g_strdup( ini->value );
+			}
+			else if( g_strcasecmp( ini->key, "dbuser" ) == 0 )
+			{
+				g_free( conf->dbuser );
+				conf->dbuser = g_strdup( ini->value );
+			}
+			else if( g_strcasecmp( ini->key, "dbpass" ) == 0 )
+			{
+				g_free( conf->dbpass );
+				conf->dbpass = g_strdup( ini->value );
+			}
+			else if( g_strcasecmp( ini->key, "dbname" ) == 0 )
+			{
+				g_free( conf->dbname );
+				conf->dbname = g_strdup( ini->value );
 			}
 			else
 			{

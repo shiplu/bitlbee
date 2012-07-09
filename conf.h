@@ -54,6 +54,13 @@ typedef struct conf
 	char *ft_listen;
 	char **protocols;
 	char *cafile;
+	char *storage;
+	char *dbhost;
+	char *dbport;
+	char *dbuser;
+	char *dbpass;
+	char *dbname;
+	
 } conf_t;
 
 G_GNUC_MALLOC conf_t *conf_load( int argc, char *argv[] );
