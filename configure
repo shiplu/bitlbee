@@ -469,7 +469,11 @@ if detect_resolv_dynamic || detect_resolv_static; then
 	echo '#define HAVE_RESOLV_A' >> config.h
 fi
 
-STORAGES="xml mysql"
+STORAGES="xml"
+
+if [ "$mysql" = "1" ]; then
+	STORAGES="$STORAGES mysql"
+fi
 
 if [ "$ldap" = "auto" ]; then
 	detect_ldap

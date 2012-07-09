@@ -31,6 +31,10 @@
 extern storage_t storage_text;
 extern storage_t storage_xml;
 
+#ifdef WITH_MYSQL
+  extern storage_t storage_mysql;
+#endif
+
 static GList *storage_backends = NULL;
 
 void register_storage_backend(storage_t *backend)
@@ -64,8 +68,16 @@ GList *storage_init(const char *primary, char **migrate)
 	int i;
 	storage_t *storage;
 	
-	register_storage_backend(&storage_xml);
-	
+	if( g_strcasecmp(global.conf->storage, "mysql")==0 ){
+#ifdef WITH_MYSQL
+	  register_storage_backend(&storage_mysql);
+#else
+	  log_message(LOGLVL_INFO, "mysql support is not found. May be you need to compile it. Falling back to default xml storage");
+	  register_storage_backend(&storage_xml);
+#endif
+	}else if( g_strcasecmp(global.conf->storage, "xml")==0 ){
+	  register_storage_backend(&storage_xml);
+	}
 	storage = storage_init_single(primary);
 	if (storage == NULL && storage->save == NULL)
 		return NULL;

@@ -1,11 +1,11 @@
-  /********************************************************************\
-  * BitlBee -- An IRC to other IM-networks gateway                     *
-  *                                                                    *
-  * Copyright 2002-2006 Wilmer van der Gaast and others                *
-  \********************************************************************/
+/********************************************************************\
+* BitlBee -- An IRC to other IM-networks gateway                     *
+*                                                                    *
+* Copyright 2002-2006 Wilmer van der Gaast and others                *
+\********************************************************************/
 
-/* 
- * Storage backend that uses an MySQL. 
+/*
+ * Storage backend that uses an MySQL.
  * Sample schema can be found on /doc/schema_mysql.sql
  */
 
@@ -31,6 +31,7 @@
 #include "base64.h"
 #include "arc.h"
 #include "sha1.h"
+#include <mysql/mysql.h>
 
 #if GLIB_CHECK_VERSION(2,8,0)
 #include <glib/gstdio.h>
@@ -42,38 +43,72 @@
 
 typedef enum
 {
-	MYSQL_PASS_CHECK_ONLY = -1,
-	MYSQL_PASS_UNKNOWN = 0,
-	MYSQL_PASS_WRONG,
-	MYSQL_PASS_OK
+    MYSQL_PASS_CHECK_ONLY = -1,
+    MYSQL_PASS_UNKNOWN = 0,
+    MYSQL_PASS_WRONG,
+    MYSQL_PASS_OK
 } mysql_pass_st;
 
 /* To make it easier later when extending the format: */
 #define MYSQL_FORMAT_VERSION 1
 
+/* Function prototypes. Declared here so I dont have to scroll the whole file */
+static void mysql_storage_init( void );
+static storage_status_t mysql_storage_load( irc_t *irc, const char *password );
+static storage_status_t mysql_storage_check_pass( const char *my_nick, const char *password );
+static storage_status_t mysql_storage_save( irc_t *irc, int overwrite );
+static storage_status_t mysql_storage_remove( const char *nick, const char *password );
+
 struct mysql_parsedata
 {
-	irc_t *irc;
-	char *current_setting;
-	account_t *current_account;
-	irc_channel_t *current_channel;
-	set_t **current_set_head;
-	char *given_nick;
-	char *given_pass;
-	mysql_pass_st pass_st;
-	int unknown_tag;
+    irc_t *irc;
+    char *current_setting;
+    account_t *current_account;
+    irc_channel_t *current_channel;
+    set_t **current_set_head;
+    char *given_nick;
+    char *given_pass;
+    mysql_pass_st pass_st;
+    int unknown_tag;
 };
 
-static void mysql_init( void ){}
-static storage_status_t mysql_load( irc_t *irc, const char *password ){ return STORAGE_OTHER_ERROR; }
-static storage_status_t mysql_check_pass( const char *my_nick, const char *password ){return STORAGE_OTHER_ERROR;}
-static storage_status_t mysql_save( irc_t *irc, int overwrite ){return STORAGE_OTHER_ERROR;}
-static storage_status_t mysql_remove( const char *nick, const char *password ){return STORAGE_OTHER_ERROR;}
+
+MYSQL mysql;
+
+static void mysql_storage_init( void ) {
+    
+    char stmt_buf[100];
+    
+    if (mysql_init(&mysql) == NULL) {
+        log_message( LOGLVL_WARNING, "Can not initialize MySQL. Configuration won't be saved.");
+    }
+    if (!mysql_real_connect
+            (&mysql, "localhost", "USERNAME", "PASSWORD", NULL, 0, NULL, 0)) {
+	log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(&mysql));
+    }
+
+    if (mysql_select_db(&mysql, "DATABASENAME")) {
+        log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(&mysql));
+    }
+
+}
+static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
+    return STORAGE_OTHER_ERROR;
+}
+static storage_status_t mysql_storage_check_pass( const char *my_nick, const char *password ) {
+    return STORAGE_OTHER_ERROR;
+}
+static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
+    return STORAGE_OTHER_ERROR;
+}
+static storage_status_t mysql_storage_remove( const char *nick, const char *password ) {
+    return STORAGE_OTHER_ERROR;
+}
 storage_t storage_mysql = {
-	.name = "mysql",
-	.init = mysql_init,
-	.check_pass = mysql_check_pass,
-	.remove = mysql_remove,
-	.load = mysql_load,
-	.save = mysql_save
+    .name = "mysql",
+    .init = mysql_storage_init,
+    .check_pass = mysql_storage_check_pass,
+    .remove = mysql_storage_remove,
+    .load = mysql_storage_load,
+    .save = mysql_storage_save
 };
