@@ -58,7 +58,7 @@ static storage_status_t mysql_storage_load( irc_t *irc, const char *password );
 static storage_status_t mysql_storage_check_pass( const char *my_nick, const char *password );
 static storage_status_t mysql_storage_save( irc_t *irc, int overwrite );
 static storage_status_t mysql_storage_remove( const char *nick, const char *password );
-
+static void mysql_storage_deinit( void );
 struct mysql_parsedata
 {
     irc_t *irc;
@@ -72,25 +72,20 @@ struct mysql_parsedata
     int unknown_tag;
 };
 
-
-MYSQL mysql;
+MYSQL *mysql = NULL;
 
 static void mysql_storage_init( void ) {
-    
-    char stmt_buf[100];
-    
-    if (mysql_init(&mysql) == NULL) {
+    if (mysql_init(mysql) == NULL) {
         log_message( LOGLVL_WARNING, "Can not initialize MySQL. Configuration won't be saved.");
     }
     if (!mysql_real_connect
-            (&mysql, "localhost", "USERNAME", "PASSWORD", NULL, 0, NULL, 0)) {
-	log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(&mysql));
+            (mysql, "localhost", "USERNAME", "PASSWORD", NULL, 0, NULL, 0)) {
+	log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(mysql));
     }
 
-    if (mysql_select_db(&mysql, "DATABASENAME")) {
-        log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(&mysql));
+    if (mysql_select_db(mysql, "DATABASENAME")) {
+        log_message( LOGLVL_WARNING, "%s\nConfiguration won't be saved.", mysql_error(mysql));
     }
-
 }
 static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
     return STORAGE_OTHER_ERROR;
@@ -104,11 +99,19 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 static storage_status_t mysql_storage_remove( const char *nick, const char *password ) {
     return STORAGE_OTHER_ERROR;
 }
+
+static void mysql_storage_deinit( void ) {
+    if(mysql!=NULL) {
+        mysql_close(mysql);
+    }
+}
+
 storage_t storage_mysql = {
     .name = "mysql",
     .init = mysql_storage_init,
     .check_pass = mysql_storage_check_pass,
     .remove = mysql_storage_remove,
     .load = mysql_storage_load,
-    .save = mysql_storage_save
+    .save = mysql_storage_save,
+    .deinit = mysql_storage_deinit
 };
