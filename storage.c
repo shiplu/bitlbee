@@ -249,3 +249,16 @@ storage_status_t storage_rename (const char *onick, const char *nnick, const cha
 	return STORAGE_OK;
 }
 #endif
+
+void storage_deinit(void)
+{
+    GList *gl;
+    storage_t *st;
+    storage_status_t status;
+    /* Loop all the storage providers and clean up each of them */
+
+    for (gl = global.storage; gl; gl = gl->next) {
+        st = gl->data;
+        st->deinit();
+    }
+}

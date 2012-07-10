@@ -50,6 +50,7 @@ typedef struct storage{
 
 	/* May be NULL if not supported by backend */
 	storage_status_t (*rename) (const char *onick, const char *nnick, const char *password);
+	void (*deinit) (void);
 } storage_t;
 
 storage_status_t storage_check_pass (const char *nick, const char *password);
@@ -63,4 +64,5 @@ storage_status_t storage_remove (const char *nick, const char *password);
 void register_storage_backend(storage_t *);
 G_GNUC_MALLOC GList *storage_init(const char *primary, char **migrate);
 
+void storage_deinit(void);
 #endif /* __STORAGE_H__ */
