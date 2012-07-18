@@ -102,7 +102,7 @@ static int send_query(MYSQL *mysql, const char *query, unsigned long len){
     fprintf(stderr, "QUERY\t%s\n", query);
     fprintf(stderr, "\tLength: %03lu  Errno: %u %s\n", len, m_errno, ((info==NULL)? "":info));
     if(m_errno!=0)
-	fprintf(stderr, "\t\e[31mError = %s\e[0m\n", mysql_error(mysql));
+	fprintf(stderr, "\e[31mERROR\t%s\e[0m\n", mysql_error(mysql));
     
     return return_value;
 }
@@ -165,10 +165,10 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     row = row->next;
     type = g_strdup(((GString *)row->data)->str);
 
-    fprintf(stderr, "Current Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
+    fprintf(stderr, "\tCurrent Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
     
     if( !name || !type ){
-        fprintf(stderr, "Missing values for channels");
+        fprintf(stderr, "\e[31mERROR\tMissing values for channels. channel: %s type: %s\e[0m\n", name, type);
 	g_free(name);
 	g_free(type);
         return;
@@ -177,7 +177,7 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     /// 4.2 Create/find a channel and assign
     channel = irc_channel_by_name( irc, name );
     if(!channel){
-	fprintf(stderr, "No IRC channel found. Creating one with name%s\n", name);
+	fprintf(stderr, "\tNo IRC channel found. Creating one with name%s\n", name);
 	channel =  irc_channel_new( irc, name );
     }
     
@@ -188,7 +188,7 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     }else{
 	g_free(name);
 	g_free(type);
-	fprintf(stderr, "Last channel creation was not successfull\n");
+	fprintf(stderr, "\e[31mERROR\tLast channel creation was not successfull\e[0m\n");
 	return;
     }
     
@@ -218,7 +218,7 @@ static void mysql_storage_load_account_buddies(gpointer data, gpointer user_data
     if(account && handle && nick ){
         nick_set_raw(account, handle, nick );
     }else{
-        fprintf(stderr, "Missing values for account buddy");
+        fprintf(stderr, "\e[31mERROR\tMissing values for account buddy\e[0m\n");
     }
 }
 
@@ -292,9 +292,9 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
         prpl = find_protocol( protocol );
 
     if( !handle || !password|| !protocol )
-        fprintf(stderr, "Missing values for account");
+        fprintf(stderr, "\e[31mERROR\tMissing values for account\e[0m\n");
     else if( !prpl )
-        fprintf(stderr, "Unknown protocol: %s", protocol );
+        fprintf(stderr, "\e[31mERROR\tUnknown protocol: %s\e[0m\n", protocol );
     else{
         acc = account_add(irc->b, prpl, handle, password );
         if( server )
@@ -304,11 +304,11 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
         if( tag )
             set_setstr( &acc->set, "tag", tag );
     }
-    g_free( password );
-    
+    //g_free( password );
     
     /// 3.2 Get all the settings 1 by 1
-    g_string_printf(qry, "SELECT name, value from account_settings where account='%ld'", account_id);
+    qry = g_string_new("SELECT name, value from account_settings where account=");
+    g_string_append_printf(qry, "'%ld'", account_id);
     m_rows = mysql_multiple_rows(mysql, qry->str);
     
     /// 3.3 Set all the user account settings to irc account struct 1 by 1
@@ -322,6 +322,8 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
     /// 3.5 Set all the renamed budy to irc account struct 1 by 1
     g_list_foreach(m_rows, mysql_storage_load_account_buddies, &acc);
     mysql_free_multiple_rows(m_rows);	
+    
+    g_string_free(qry, TRUE);
 }
 
 
@@ -379,11 +381,13 @@ static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query){
     return rows;
 }
 
-static void msyql_free_single_row_field(gpointer data){
+static void mysql_free_single_row_field(gpointer data){
+    /// NULL fields in mysql are NULL. 
+    /// Hence we check if its null
     g_string_free(data, TRUE);
 }
 static void mysql_free_single_row(gpointer data){
-    g_slist_free_full(data, msyql_free_single_row_field);
+    g_slist_free_full(data, mysql_free_single_row_field);
 }
 
 static GSList* mysql_copy_single_row(MYSQL_RES *result) {
@@ -452,14 +456,14 @@ static storage_status_t set_settings_flag(MYSQL *mysql, set_t *settings, char * 
 static void mysql_storage_init( void ) {
     mysql = mysql_init(NULL);
     if (mysql == NULL) {
-        fprintf(stderr, "Can not initialize MySQL. Configuration won't be saved.\n");
+        fprintf(stderr, "\e[31mERROR\tCan not initialize MySQL. Configuration won't be saved.\e[0m\n");
     }
     if (!mysql_real_connect(mysql, global.conf->dbhost, global.conf->dbuser, global.conf->dbpass, NULL, global.conf->dbport, NULL, 0)) {
-	fprintf(stderr, "%s\nConfiguration won't be saved.\n", mysql_error(mysql));
+	fprintf(stderr, "\e[31mERROR\t%s\nConfiguration won't be saved.\e[0m\n", mysql_error(mysql));
     }
 
     if (mysql_select_db(mysql, global.conf->dbname)) {
-        fprintf(stderr, "%s\nConfiguration won't be saved.\n", mysql_error(mysql));
+        fprintf(stderr, "\e[31mERROR\t%s\nConfiguration won't be saved.\e[0m\n", mysql_error(mysql));
     }
 }
 static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
@@ -493,18 +497,21 @@ static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
     g_list_foreach(m_rows, mysql_storage_load_settings, &irc->b->set);
     mysql_free_multiple_rows(m_rows);
     
-/// For now all the account populating stuffs are turned off. It'll be tested later.
-//     /// 3. Get all the account current user have
-//     g_string_printf(qry, "SELECT id, user, protocol, handle, password, autoconnect, tag, server"
-//     "FROM `accounts` WHERE `user` = '%ld'", user_id);
-//     m_rows = mysql_multiple_rows(mysql, qry->str);
-//     
-//     /// 3.1. set all the accounts to this user
-//     /// This funciton also handles
-//     /// Setting all account settings and all the buddy list
-//     g_list_foreach(m_rows, mysql_storage_load_accounts, &irc);
-//     mysql_free_multiple_rows(m_rows);
+    /// 3. Get all the account current user have
+    g_string_printf(qry, "SELECT id, user, protocol, handle, pass"
+    "word, autoconnect, tag, server " /// <--- The space at the end is necessary
+    "FROM `accounts` WHERE `user` = '%ld'", user_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
     
+    if(g_list_length(m_rows)>0){
+	/// 3.1. set all the accounts to this user
+	/// This funciton also handles
+	/// Setting all account settings and all the buddy list
+	g_list_foreach(m_rows, mysql_storage_load_accounts, &irc);
+	mysql_free_multiple_rows(m_rows);
+    }else{
+	fprintf(stderr, "\e[31m\tUser has no account!\e[0m");
+    }
     
     /// 4. Get all the channels current user have
     g_string_printf(qry, "SELECT id, user, name, type "
@@ -516,7 +523,7 @@ static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
 	g_list_foreach(m_rows, mysql_storage_load_channels, &irc);
 	mysql_free_multiple_rows(m_rows);
     }else{
-	fprintf(stderr, "\e[31m User has no channel!\e[0m");
+	fprintf(stderr, "\e[31m\tUser has no channel!\e[0m");
     }
     /// end clean up
     free_g_str_list(3, buf, qry, nick);
@@ -640,7 +647,7 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     if(num_rows<0 || num_rows>2){
 	fprintf(stderr, "User neither added, updated, unchanged\n");
 	if(mysql_errno(mysql)!=0){
-	    fprintf(stderr, "Error from MySQL: %s\n", mysql_error(mysql));
+	    fprintf(stderr, "\e[31mERROR\t%s\e[0m\n", mysql_error(mysql));
 	}
 	g_string_free(nick, TRUE);
 	g_string_free(pass, TRUE);
@@ -842,7 +849,7 @@ static storage_status_t mysql_storage_remove( const char *nick, const char *pass
 	     return STORAGE_NO_SUCH_USER;
 	 }
     }else{
-	fprintf(stderr, "ERROR\t%s\n", mysql_error(mysql));
+	fprintf(stderr, "\e[31mERROR\t%s\e[0m\n", mysql_error(mysql));
 	return STORAGE_OTHER_ERROR;
     }
 }
