@@ -28,6 +28,7 @@
 
 #define BITLBEE_CORE
 #include "bitlbee.h"
+#include "protocols/bee.h"
 #include "base64.h"
 #include "arc.h"
 #include "sha1.h"
@@ -75,6 +76,11 @@ static storage_status_t save_kv_pair(GString *q, GString *buf, char *table_name,
 		  char *fk_column_name, char *key_name, char *value_name, 
 		  long fk_column_value, char *key, char *value);
 static int send_query(MYSQL *mysql, const char *query, unsigned long len);
+static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query);
+static void mysql_free_multiple_rows(GList *table);
+static void mysql_free_single_row(gpointer data);
+static GSList* mysql_copy_single_row(MYSQL_RES *result);
+static long storage_get_user_id(GString *q, GString *buf, GString *nick);
 
 typedef struct database_object_t {
     MYSQL *mysql;
@@ -91,11 +97,12 @@ MYSQL *mysql = NULL;
 static int send_query(MYSQL *mysql, const char *query, unsigned long len){
     int return_value = mysql_real_query(mysql, query, len);
     unsigned int m_errno = mysql_errno(mysql);
+    char *info = mysql_info(mysql);
     
-    fprintf(stderr, "QUERY\t\t%s\n", query);
-    fprintf(stderr, "\t\t\tLength = %03lu,  Errno = %u, Affected = %Ld\n", len, m_errno, mysql_affected_rows(mysql));
+    fprintf(stderr, "QUERY\t%s\n", query);
+    fprintf(stderr, "\tLength: %03lu  Errno: %u %s\n", len, m_errno, ((info==NULL)? "":info));
     if(m_errno!=0)
-	fprintf(stderr, "Error = %s\n", mysql_error(mysql));
+	fprintf(stderr, "\t\e[31mError = %s\e[0m\n", mysql_error(mysql));
     
     return return_value;
 }
@@ -128,11 +135,255 @@ static void free_g_str_list(int num, ...){
     }
     va_end ( arguments );                  // Cleans up the list
 }
+
+/**
+ * @param data as GSList with to element. first one is key. second one is value.
+ * @param user_data The address of the set linked lists head element.
+ */
+static void mysql_storage_load_settings(gpointer data, gpointer user_data){
+    GSList *row = data;
+    /// save this set settings to irc user settings
+    set_setstr(((set_t **)user_data), ((GString *)(row->data))->str, ((GString *)(row->next->data))->str);
+}
+
+static void mysql_storage_load_channels(gpointer data, gpointer user_data){
+    char *name, *type;
+    long int channel_id=0, user_id = 0;
+    irc_t **ptr_irc= user_data;
+    irc_t *irc = *ptr_irc;
+    irc_channel_t *channel = NULL;
+    GSList *row = data;
+    GString *qry= NULL;
+    GList *m_rows= NULL;
+    
+    /// get all the fields
+    channel_id = atol(((GString *)row->data)->str);
+    row = row->next;
+    user_id = atol(((GString *)row->data)->str);
+    row = row->next;
+    name = g_strdup(((GString *)row->data)->str);
+    row = row->next;
+    type = g_strdup(((GString *)row->data)->str);
+
+    fprintf(stderr, "Current Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
+    
+    if( !name || !type ){
+        fprintf(stderr, "Missing values for channels");
+	g_free(name);
+	g_free(type);
+        return;
+    }
+
+    /// 4.2 Create/find a channel and assign
+    channel = irc_channel_by_name( irc, name );
+    if(!channel){
+	fprintf(stderr, "No IRC channel found. Creating one with name%s\n", name);
+	channel =  irc_channel_new( irc, name );
+    }
+    
+    if(channel){
+	/// dont know why "type" is hardcoded here. 
+	/// I just followed storage_xml.c
+        set_setstr( &channel->set, "type", type );
+    }else{
+	g_free(name);
+	g_free(type);
+	fprintf(stderr, "Last channel creation was not successfull\n");
+	return;
+    }
+    
+    /// 4.3 get all the chanel setting and update 1 by 1
+    qry = g_string_new("SELECT name, value from channel_settings where channel=");
+    g_string_append_printf(qry, "'%ld'", channel_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
+    
+    
+    
+    /// 3.3 Set all the user account settings to irc account struct 1 by 1
+    g_list_foreach(m_rows, mysql_storage_load_settings, &channel->set);
+    mysql_free_multiple_rows(m_rows);
+    
+    g_free(name);
+    g_free(type);
+    g_string_free(qry, TRUE);
+}
+
+static void mysql_storage_load_account_buddies(gpointer data, gpointer user_data){
+    account_t **acc = user_data;
+    account_t *account = *acc;
+    GSList *row = data;
+    /// there are two rows. So 2 iteration on fields
+    char *handle = g_strdup(((GString *)(row->data))->str);
+    char *nick = g_strdup(((GString *)(row->next->data))->str);
+    if(account && handle && nick ){
+        nick_set_raw(account, handle, nick );
+    }else{
+        fprintf(stderr, "Missing values for account buddy");
+    }
+}
+
+static void mysql_storage_load_account_settings(gpointer data, gpointer user_data){
+    account_t **acc = user_data;
+    account_t *account = *acc;
+    GSList *row = data;
+    /// there are two rows. So 2 iteration on fields
+    char *name = g_strdup(((GString *)(row->data))->str);
+    char *value = g_strdup(((GString *)(row->next->data))->str);
+    
+    if(account){
+        set_t *s = set_find(&account->set, name);
+        if( s && ( s->flags & ACC_SET_ONLINE_ONLY ) ){
+            g_free(name);
+	    /// not sure whether bellow statement will be needed.
+	    //name = NULL;
+            return;
+        }
+    }
+    set_setstr(&account->set, name, (char*) value );
+    g_free(name);
+    
+    /// not sure whether bellow statement will be needed.
+    //name = NULL;
+}
+
+static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
+    GSList *row = data;
+    GList *m_rows = NULL;
+    account_t *acc = NULL;
+    GString *qry = NULL;
+    irc_t ** ptr_irc = user_data;
+    irc_t *irc = *ptr_irc;
+    char *protocol, *handle, *server, *password = NULL, *autoconnect, *tag;
+//     int pass_len;
+    long int account_id = 0/*, user_id=0*/;
+    struct prpl *prpl = NULL;
+
+    /**
+    * This is the sequence how data is read
+    * +-------------+
+    * | id          |
+    * | user        |
+    * | protocol    |
+    * | handle      |
+    * | password    |
+    * | autoconnect |
+    * | tag         |
+    * | server      |
+    * +-------------+
+    */
+    
+    account_id = atol(((GString *)row->data)->str);
+    row = row->next;
+    //user_id = atol(((GString *)row->data)->str);
+    row = row->next;
+    protocol = ((GString *)row->data)->str;
+    row = row->next;
+    handle = ((GString *)row->data)->str;
+    row = row->next;
+    password = ((GString *)row->data)->str;
+    row = row->next;
+    autoconnect = ((GString *)row->data)->str;
+    row = row->next;
+    tag = ((GString *)row->data)->str;
+    row = row->next;
+    server = ((GString *)row->data)->str;
+    
+    if( protocol )
+        prpl = find_protocol( protocol );
+
+    if( !handle || !password|| !protocol )
+        fprintf(stderr, "Missing values for account");
+    else if( !prpl )
+        fprintf(stderr, "Unknown protocol: %s", protocol );
+    else{
+        acc = account_add(irc->b, prpl, handle, password );
+        if( server )
+            set_setstr( &acc->set, "server", server );
+        if( autoconnect )
+            set_setstr( &acc->set, "auto_connect", autoconnect );
+        if( tag )
+            set_setstr( &acc->set, "tag", tag );
+    }
+    g_free( password );
+    
+    
+    /// 3.2 Get all the settings 1 by 1
+    g_string_printf(qry, "SELECT name, value from account_settings where account='%ld'", account_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
+    
+    /// 3.3 Set all the user account settings to irc account struct 1 by 1
+    g_list_foreach(m_rows, mysql_storage_load_account_settings, &acc);
+    mysql_free_multiple_rows(m_rows);
+    
+    /// 3.4 Read all the renamed buddy
+    g_string_printf(qry, "SELECT handle, nick from account_buddies where account='%ld'", account_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
+    
+    /// 3.5 Set all the renamed budy to irc account struct 1 by 1
+    g_list_foreach(m_rows, mysql_storage_load_account_buddies, &acc);
+    mysql_free_multiple_rows(m_rows);	
+}
+
+
+static void mysql_free_multiple_rows(GList *table){
+    g_list_free_full(table, mysql_free_single_row);
+}
+
+/** 
+ * Execute the query and returns all the result in a tabular format
+ * You must free this table by caling mysql_free_multiple_rows
+ */
+static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query){
+    my_ulonglong num_rows=0;
+    MYSQL_RES *result = NULL;
+    GSList *single_row = NULL;
+    GList *rows = NULL;
+    GString *q = g_string_new(query);
+    int query_status = send_query(mysql_handle, q->str, q->len);
+
+    if(query_status!=0){
+	g_string_free(q, TRUE);
+	return NULL;
+    }
+    
+    result = mysql_store_result(mysql_handle);
+    
+    if(result==NULL){
+	/// it was not a query that returns statemnet (e.g. INSERT, DELETE)
+	g_string_free(q, TRUE);
+	return NULL;
+    }
+
+    num_rows = mysql_num_rows(result);
+
+    fprintf(stderr, "\t%Ld row%s found\n", num_rows, ((num_rows==1)? "": "s"));
+    
+    if(num_rows>0){
+	int i=0;
+	for(i=0;i<num_rows; i++){
+	    single_row = mysql_copy_single_row(result);
+	    rows = g_list_prepend(rows, single_row);
+	}
+	/// As prepending list actually reverses it. We reverse it agian
+	/// to get the correct order.
+	rows = g_list_reverse(rows);
+    }else{
+	mysql_free_result(result);
+	g_string_free(q, TRUE);
+	return NULL;
+    }
+    
+    /// clean up
+    g_string_free(q, TRUE);
+    mysql_free_result(result);
+    return rows;
+}
+
 static void msyql_free_single_row_field(gpointer data){
     g_string_free(data, TRUE);
 }
-static void mysql_free_single_row(GSList *array){
-    g_slist_free_full(array, msyql_free_single_row_field);
+static void mysql_free_single_row(gpointer data){
+    g_slist_free_full(data, msyql_free_single_row_field);
 }
 
 static GSList* mysql_copy_single_row(MYSQL_RES *result) {
@@ -153,40 +404,14 @@ static GSList* mysql_copy_single_row(MYSQL_RES *result) {
  * strings. You must free this array by calling mysql_free_single_row()
  */
 static GSList * mysql_single_row(MYSQL *mysql_handle, char* query){
-    my_ulonglong num_rows=0;
-    MYSQL_RES *result = NULL;
-    GSList * single_row = NULL;
-    GString *q = g_string_new(query);
-    int query_status = send_query(mysql_handle, q->str, q->len);
-
-    if(query_status!=0){
-	g_string_free(q, TRUE);
-	return NULL;
-    }
-    
-    result = mysql_store_result(mysql_handle);
-    
-    if(result==NULL){
-	/// it was not a query that returns statemnet (e.g. INSERT, DELETE)
-	g_string_free(q, TRUE);
-	return NULL;
-    }
-
-    num_rows = mysql_num_rows(result);
-
-    if(num_rows>0){
-	/// We only fetch the first row
-	single_row = mysql_copy_single_row(result);
-    }else{
-	mysql_free_result(result);
-	g_string_free(q, TRUE);
-	return NULL;
-    }
-    
-    /// clean up
-    g_string_free(q, TRUE);
-    mysql_free_result(result);
-    return single_row;
+    GList * rows = mysql_multiple_rows(mysql_handle, query);
+    GSList *first_row = NULL;
+    /// keep only the first row
+    first_row = rows->data;
+    /// clear the list but the elements
+    g_list_free(rows);
+    /// return back the row
+    return first_row;
 }
 ///@todo this function must be refactored along with set_settings_flag function. 
 static storage_status_t set_channel_settings(MYSQL *mysql, set_t *settings, char * table_name, char *key_column_name, long key_column_id){
@@ -238,8 +463,66 @@ static void mysql_storage_init( void ) {
     }
 }
 static storage_status_t mysql_storage_load( irc_t *irc, const char *password ) {
-    return STORAGE_OTHER_ERROR;
+    
+//     GSList *row = NULL;
+    GList *m_rows = NULL;
+    GString *qry  = g_string_new("");
+    GString *buf  = g_string_new("");
+    GString *nick = g_string_new(irc->user->nick);
+    
+    long user_id =0;
+    
+    /// 1. Check if we have such user
+    storage_status_t ss= mysql_storage_check_pass(irc->user->nick, password);
+    
+    /// if not found or something else we abort
+    if(ss!=STORAGE_OK){
+	free_g_str_list(3, buf, qry, nick);
+	return ss;
+    }
+    
+    /// 2. Read the user settings now
+    /// 2.1 Get the user id.
+    user_id = storage_get_user_id(qry, buf, nick);
+    
+    /// 2.2 Get all the settings 1 by 1
+    g_string_printf(qry, "SELECT name, value from user_settings where user='%ld'", user_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
+    
+    /// 2.3 Set all the user settings to irc struct 1 by 1
+    g_list_foreach(m_rows, mysql_storage_load_settings, &irc->b->set);
+    mysql_free_multiple_rows(m_rows);
+    
+/// For now all the account populating stuffs are turned off. It'll be tested later.
+//     /// 3. Get all the account current user have
+//     g_string_printf(qry, "SELECT id, user, protocol, handle, password, autoconnect, tag, server"
+//     "FROM `accounts` WHERE `user` = '%ld'", user_id);
+//     m_rows = mysql_multiple_rows(mysql, qry->str);
+//     
+//     /// 3.1. set all the accounts to this user
+//     /// This funciton also handles
+//     /// Setting all account settings and all the buddy list
+//     g_list_foreach(m_rows, mysql_storage_load_accounts, &irc);
+//     mysql_free_multiple_rows(m_rows);
+    
+    
+    /// 4. Get all the channels current user have
+    g_string_printf(qry, "SELECT id, user, name, type "
+    "FROM `channels` WHERE `user` = '%ld'", user_id);
+    m_rows = mysql_multiple_rows(mysql, qry->str);
+    
+    if(g_list_length(m_rows)>0){
+	/// 4.1 set all the channels info to this user
+	g_list_foreach(m_rows, mysql_storage_load_channels, &irc);
+	mysql_free_multiple_rows(m_rows);
+    }else{
+	fprintf(stderr, "\e[31m User has no channel!\e[0m");
+    }
+    /// end clean up
+    free_g_str_list(3, buf, qry, nick);
+    return STORAGE_OK;
 }
+
 
 static storage_status_t mysql_storage_check_pass( const char *nick, const char *password ) {
     /// mysql variables
@@ -267,8 +550,6 @@ static storage_status_t mysql_storage_check_pass( const char *nick, const char *
     g_string_append(query, "') from users where nick='");
     append_mysql_escaped_param(query, to, g_nick);
     g_string_append(query, "' limit 1");
-    
-    fprintf(stderr, "QUERY %s\n", query->str);
     
     /// executing query
     ret_query = send_query(mysql,query->str,query->len);
@@ -312,6 +593,19 @@ static storage_status_t mysql_storage_check_pass( const char *nick, const char *
     
     return st;
 }
+
+static long storage_get_user_id(GString *q, GString *buf, GString *nick) {
+    long int user_id;
+    GSList *user_row = NULL;
+    g_string_printf(q, "SELECT id from users where nick='");
+    append_mysql_escaped_param(q, buf, nick);
+    g_string_append(q,"'");
+    user_row = mysql_single_row(mysql, q->str);
+    user_id = atol(((GString *)user_row->data)->str);
+    g_slist_free(user_row);
+    return user_id;
+}
+
 static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     /// static variables
     my_ulonglong num_rows=0;
@@ -321,8 +615,8 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     storage_status_t settings_status;
     
     /// dynamic variables. Needs clean up function called
-    GSList *user_row = NULL;
-    GString *user_id_str = NULL;
+//     GSList *user_row = NULL;
+//     GString *user_id_str = NULL;
     GString *nick = g_string_new(irc->user->nick);
     GString *pass = g_string_new(irc->password);
     GString *buf = g_string_new("");
@@ -342,7 +636,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     g_string_printf(q, "%s", "");
     
     num_rows = mysql_affected_rows(mysql);
-    fprintf(stderr, "Rows = %Ld\n", num_rows);
     
     if(num_rows<0 || num_rows>2){
 	fprintf(stderr, "User neither added, updated, unchanged\n");
@@ -358,13 +651,7 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     
     /// 2. Save the user settings
     ///   2.1 Get the user id
-    g_string_printf(q, "SELECT id from users where nick='");
-    append_mysql_escaped_param(q, buf, nick);
-    g_string_append(q,"'");
-    user_row = mysql_single_row(mysql, q->str);
-    user_id_str = (GString *)user_row->data;
-    user_id = atol(user_id_str->str);
-    
+    user_id= storage_get_user_id(q, buf,nick);
     
     /// 2.2 Set all the settings 1 by 1
     settings_status = set_settings_flag(mysql, irc->b->set,"user_settings", "user", user_id, SET_NOSAVE);
@@ -375,7 +662,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	g_string_free(pass, TRUE);
 	g_string_free(buf, TRUE);
 	g_string_free(q, TRUE);
-	mysql_free_single_row(user_row);
 	return settings_status;
     }
 
@@ -442,7 +728,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	    g_string_free(pass, TRUE);
 	    g_string_free(buf, TRUE);
 	    g_string_free(q, TRUE);
-	    mysql_free_single_row(user_row);
 	    return STORAGE_OTHER_ERROR;
 	}
 	
@@ -459,7 +744,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	if(settings_status!=STORAGE_OK){
 	    /// something bad happened!
 	    free_g_str_list(8, acc_handle, acc_password, acc_protocol, acc_tag, account_id_str, nick, pass, buf, q);
-	    mysql_free_single_row(user_row);
 	    mysql_free_single_row(account_row);
 	    return settings_status;
 	}
@@ -524,8 +808,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     g_string_free(pass, TRUE);
     g_string_free(buf, TRUE);
     g_string_free(q, TRUE);
-    mysql_free_single_row(user_row);
-    
     /// all went good till now.
     return STORAGE_OK;
 }    
@@ -622,7 +904,7 @@ static void mysql_storage_save_nick(gpointer key, gpointer value, gpointer data)
     GString *buffer = ((database_object *)data)->string_buffer;
     char * account_id = (char *)(((database_object *)data)->data);
     
-    storage_status_t buddy_kv_stat = save_kv_pair(query, buffer, "account_buddies", "account", "handle", "nick",
+    /*storage_status_t buddy_kv_stat = */save_kv_pair(query, buffer, "account_buddies", "account", "handle", "nick",
 	atol(account_id), (char *)key, (char *)value);
 }
 
