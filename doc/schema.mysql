@@ -1,5 +1,13 @@
 ALTER SCHEMA `bitlbee_data`  DEFAULT CHARACTER SET utf8  DEFAULT COLLATE utf8_general_ci;
 
+-- Drop all the tables;
+DROP TABLE IF EXISTS `channel_settings`;
+DROP TABLE IF EXISTS `channels`;
+DROP TABLE IF EXISTS `account_buddies`;
+DROP TABLE IF EXISTS `account_settings`;
+DROP TABLE IF EXISTS `accounts`;
+DROP TABLE IF EXISTS `user_settings`;
+DROP TABLE IF EXISTS `users`;
 
 CREATE TABLE `users` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -10,7 +18,12 @@ CREATE TABLE `users` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 
-
+DROP TABLE IF EXISTS `channel_settings`;
+DROP TABLE IF EXISTS `channels`;
+DROP TABLE IF EXISTS `account_buddies`;
+DROP TABLE IF EXISTS `account_settings`;
+DROP TABLE IF EXISTS `accounts`;
+DROP TABLE IF EXISTS `user_settings`;
 CREATE TABLE `user_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user` int(11) NOT NULL,
@@ -22,9 +35,8 @@ CREATE TABLE `user_settings` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 
-
 CREATE TABLE `accounts` (
-  `id` int(11) NOT NULL,
+  `id` int(11) NOT NULL AUTO_INCREMENT,
   `user` int(11) NOT NULL,
   `protocol` varchar(10) NOT NULL,
   `handle` varchar(32) NOT NULL,
@@ -36,7 +48,6 @@ CREATE TABLE `accounts` (
   UNIQUE KEY `id_UNIQUE` (`id`),
   FOREIGN KEY (`user`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
 
 
 CREATE TABLE `account_settings` (
