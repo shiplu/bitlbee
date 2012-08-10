@@ -296,6 +296,7 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
     else if( !prpl )
         fprintf(stderr, "\e[31mERROR\tUnknown protocol: %s\e[0m\n", protocol );
     else{
+	fprintf(stderr, "\e[31mERROR\tload/password: ['%s']\e[0m\n", password);
         acc = account_add(irc->b, prpl, handle, password );
         if( server )
             set_setstr( &acc->set, "server", server );
@@ -439,6 +440,7 @@ static storage_status_t set_settings_flag(MYSQL *mysql, set_t *settings, char * 
     GString *q = g_string_new("");
     GString *buf = g_string_new("");
     set_t *set;
+    
     for( set = settings; set; set = set->next ) {
 	if( set->value && !( set->flags & flag) ) {
 		if(save_kv_pair(q, buf, table_name, key_column_name, 
@@ -673,6 +675,11 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
     }
 
     /// 3. Set all the user accounts
+    /// 3.0. But first delete all the accounts
+    g_string_printf(q, "DELETE FROM accounts WHERE `user` = '%lu'", user_id);
+    
+    send_query(mysql, q->str, q->len);
+    
     for( acc = irc->b->accounts; acc; acc = acc->next ){
 	//acc->prpl->name, acc->user, pass_b64, acc->auto_connect, acc->tag
 	/// 3.1 add user accounts
@@ -721,7 +728,7 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	if(server_exists){
 	    g_string_free(acc_server, TRUE);
 	}
-	
+	fprintf(stderr, "\e[31mERROR\tsave/password: ['%s']\e[0m\n", acc_password->str);
 	send_query(mysql, q->str, q->len);
 	num_rows =  mysql_affected_rows(mysql);
 	if(num_rows<0 || num_rows>2){
@@ -763,6 +770,10 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	    dbo.query_string = q;
 	    dbo.string_buffer = buf;
 	    dbo.data = (gpointer)(account_id_str->str);
+	    /// before that we delete all the buddies
+	    g_string_printf(q, "DELETE FROM account_buddies WHERE `account` = '%lu'", atol(account_id_str->str));
+	    send_query(mysql, q->str, q->len);
+	    
 	    g_hash_table_foreach(acc->nicks, mysql_storage_save_nick, &dbo);
 	}
 	
@@ -779,6 +790,11 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	GString* channel_id_str = NULL;
 	GString *ch_name = g_string_new("");
 	GString *ch_type = g_string_new("");
+	
+	/// 4.0 But first delete all the existing channels
+	g_string_printf(q, "DELETE FROM channels WHERE `user` = '%lu'", user_id);
+	send_query(mysql, q->str, q->len);
+	
 	for(l = irc->channels; l; l = l->next )
 	{
 	    irc_channel_t *ic = l->data;

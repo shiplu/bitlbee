@@ -232,7 +232,7 @@ static void xml_start_element( GMarkupParseContext *ctx, const gchar *element_na
 		   should still get the right settings. */
 		if( ( xd->current_channel = irc_channel_by_name( irc, name ) ) ||
 		    ( xd->current_channel = irc_channel_new( irc, name ) ) )
-			set_setstr( &xd->current_channel->set, "type", type );
+			set_setstr(&xd->current_channel->set, "type", type );
 	}
 	/* Backward compatibility: Keep this around for a while for people
 	   switching from BitlBee 1.2.4+. */
@@ -309,6 +309,8 @@ static void xml_text( GMarkupParseContext *ctx, const gchar *text_orig, gsize te
 	struct xml_parsedata *xd = data;
 	
 	strncpy( text, text_orig, text_len );
+	
+	/// making text a null terminated string
 	text[text_len] = 0;
 	
 	if( xd->pass_st < XML_PASS_OK )

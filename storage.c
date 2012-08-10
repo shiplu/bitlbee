@@ -68,22 +68,31 @@ GList *storage_init(const char *primary, char **migrate)
 	int i;
 	storage_t *storage;
 	
-	if( g_strcasecmp(global.conf->storage, "mysql")==0 ){
+	/// registering some storages
+	if( g_strcasecmp(global.conf->primary_storage, "mysql")==0 ){
 #ifdef WITH_MYSQL
 	  register_storage_backend(&storage_mysql);
 #else
 	  log_message(LOGLVL_INFO, "mysql support is not found. May be you need to compile it. Falling back to default xml storage");
 	  register_storage_backend(&storage_xml);
 #endif
-	}else if( g_strcasecmp(global.conf->storage, "xml")==0 ){
+	}else if( g_strcasecmp(global.conf->primary_storage, "xml")==0 ){
 	  register_storage_backend(&storage_xml);
 	}
+	
+	/// look for primary storage and put it at the 
+	/// beginning of the list
+	/// Note: If primary storage can not be found in
+	/// the registry storage engine will not be 
+	/// initialized!
 	storage = storage_init_single(primary);
-	if (storage == NULL && storage->save == NULL)
+	if (storage == NULL || storage->save == NULL)
 		return NULL;
 
 	ret = g_list_append(ret, storage);
 
+	/// append any other secondary storages in the list
+	/// if available
 	for (i = 0; migrate && migrate[i]; i++) {
 		storage = storage_init_single(migrate[i]);
 	
@@ -254,9 +263,8 @@ void storage_deinit(void)
 {
     GList *gl;
     storage_t *st;
-    storage_status_t status;
-    /* Loop all the storage providers and clean up each of them */
 
+    /* Loop all the storage providers and clean up each of them */
     for (gl = global.storage; gl; gl = gl->next) {
         st = gl->data;
         st->deinit();

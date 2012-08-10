@@ -54,9 +54,8 @@ typedef struct conf
 	char *ft_listen;
 	char **protocols;
 	char *cafile;
-	char *storage;
 	char *dbhost;
-	char *dbport;
+	unsigned int dbport;
 	char *dbuser;
 	char *dbpass;
 	char *dbname;
