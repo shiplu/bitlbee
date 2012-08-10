@@ -1,12 +1,117 @@
+#!/bin/bash
+
+OUTFILE=schema.mysql
+
 
 function showhelp () {
-	printf "Syntax: \t%s DBNAME USER PASS [HOST]\n\n" $(basename $0)
-	printf "DBNAME\tDatabase name\n"
-	printf "USER\tUsername of the database user\n"
-	printf "PASS\tPassword against Username\n"
-	printf "HOST\tHost of the user from where connection originates\n"
+	printf "Syntax: \t%s DBNAME USER PASS [HOST]\n\n" $(basename $0) 1>&2
+	printf "DBNAME\tDatabase name\n" 1>&2
+	printf "USER\tUsername of the database user\n" 1>&2
+	printf "PASS\tPassword against Username\n" 1>&2
+	printf "HOST\tHost of the user from where connection originates\n" 1>&2
 	exit;
 }
+
+function sqltemplate(){
+	cat <<'FINISH'
+-- Creating database
+CREATE SCHEMA IF NOT EXISTS `:database`  DEFAULT CHARACTER SET utf8  DEFAULT COLLATE utf8_general_ci;
+
+-- Create user
+-- Change this password here
+GRANT ALL PRIVILEGES ON `:database`.* to ':user'@':host' identified by ':password';
+
+
+USE :database;
+
+-- Drop all the tables;
+DROP TABLE IF EXISTS `channel_settings`;
+DROP TABLE IF EXISTS `channels`;
+DROP TABLE IF EXISTS `account_buddies`;
+DROP TABLE IF EXISTS `account_settings`;
+DROP TABLE IF EXISTS `accounts`;
+DROP TABLE IF EXISTS `user_settings`;
+DROP TABLE IF EXISTS `users`;
+
+CREATE TABLE `users` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `nick` varchar(40) NOT NULL,
+  `password` varchar(41) NOT NULL,
+  PRIMARY KEY (`nick`),
+  UNIQUE KEY `id_UNIQUE` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE `user_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user` int(11) NOT NULL,
+  `name` varchar(40) NOT NULL,
+  `value` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`name`,`user`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`user`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+CREATE TABLE `accounts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user` int(11) NOT NULL,
+  `protocol` varchar(10) NOT NULL,
+  `handle` varchar(32) NOT NULL,
+  `password` varchar(250) DEFAULT NULL,
+  `autoconnect` tinyint(4) DEFAULT NULL,
+  `tag` varchar(20) DEFAULT NULL,
+  `server` varchar(256) DEFAULT NULL,
+  PRIMARY KEY (`user`,`protocol`,`handle`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`user`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+CREATE TABLE `account_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account` int(11) NOT NULL,
+  `name` varchar(40) NOT NULL,
+  `value` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`name`,`account`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`account`) REFERENCES `accounts` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE `account_buddies` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `account` int(11) NOT NULL,
+  `handle` varchar(40) NOT NULL,
+  `nick` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`account`, `handle`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`account`) REFERENCES `accounts` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+CREATE TABLE `channels` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user` int(11) NOT NULL,
+  `name` varchar(20) NOT NULL,
+  `type` varchar(20) NOT NULL,
+  PRIMARY KEY (`user`,`name`,`type`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`user`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+
+CREATE TABLE `channel_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `channel` int(11) NOT NULL,
+  `name` varchar(40) NOT NULL,
+  `value` varchar(60) DEFAULT NULL,
+  PRIMARY KEY (`name`,`channel`),
+  UNIQUE KEY `id_UNIQUE` (`id`),
+  FOREIGN KEY (`channel`) REFERENCES `channels` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+FINISH
+}
+
+
 
 NAME=""
 USER=""
@@ -34,15 +139,17 @@ else
 	HOST=$4
 fi
 
-# load mysql
-sql=$(cat schema.mysql)
+# Load mysql
+sql=$(sqltemplate)
 sql=${sql//:database/$NAME}
 sql=${sql//:user/$USER}
 sql=${sql//:password/$PASS}
 sql=${sql//:host/$HOST}
 
 
-# echoing final sql
-printf "%s\r\n" "$sql"
+# Echoing final sql
+printf "%s\r\n" "$sql" > ${OUTFILE}
 
+echo New schema generated to \"${OUTFILE}\" 1>&2
+echo Make sure you run it as mysql root user 1>&2
 
