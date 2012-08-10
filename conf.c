@@ -67,7 +67,7 @@ conf_t *conf_load( int argc, char *argv[] )
 	conf->ft_listen = NULL;
 	conf->protocols = NULL;
 	conf->cafile = NULL;
-	conf->storage = "xml";
+//	conf->storage = g_strdup( "xml" );
 	conf->dbhost = NULL;
 	conf->dbport = 3306;
 	conf->dbuser = NULL;
@@ -138,7 +138,7 @@ conf_t *conf_load( int argc, char *argv[] )
 		else if( opt == 'h' )
 		{
 			printf( "Usage: bitlbee [-D/-F [-i <interface>] [-p <port>] [-n] [-v]] [-I]\n"
-			        "               [-c <file>] [-d <dir>] [-x] [-h]\n"
+			        "               [-c <file>] [-d <dir>] [-s <storage>] [-x] [-h]\n"
 			        "\n"
 			        "An IRC-to-other-chat-networks gateway\n"
 			        "\n"
@@ -154,8 +154,8 @@ conf_t *conf_load( int argc, char *argv[] )
 			        "  -v  Be verbose (only works in combination with -n)\n"
 			        "  -c  Load alternative configuration file\n"
 			        "  -d  Specify alternative user configuration directory\n"
-			        "  -x  Command-line interface to password encryption/hashing\n"
 				"  -s  Storage engine to use (MySQL or XML)\n"
+			        "  -x  Command-line interface to password encryption/hashing\n"
 			        "  -h  Show this help page.\n"
 			        "  -V  Show version info.\n" );
 			return NULL;
@@ -170,10 +170,11 @@ conf_t *conf_load( int argc, char *argv[] )
 		{
 			g_free( conf->user );
 			conf->user = g_strdup( optarg );
-		}else if( opt == "s" )
+		}
+		else if( opt == 's' )
 		{
-			g_free( conf->storage );
-			conf->storage = g_strdup( optarg );
+			g_free( conf->primary_storage );
+			conf->primary_storage = g_strdup( optarg );
 		}
 	}
 	
@@ -364,10 +365,6 @@ static int conf_loadini( conf_t *conf, char *file )
 			{
 				g_free( conf->cafile );
 				conf->cafile = g_strdup( ini->value );
-			}else if( g_strcasecmp( ini->key, "storage" ) == 0 )
-			{
-				g_free( conf->storage );
-				conf->storage = g_strdup( ini->value );
 			}
 			else if( g_strcasecmp( ini->key, "dbhost" ) == 0 )
 			{
@@ -376,8 +373,7 @@ static int conf_loadini( conf_t *conf, char *file )
 			}
 			else if( g_strcasecmp( ini->key, "dbport" ) == 0 )
 			{
-				g_free( conf->dbport );
-				conf->dbport = g_strdup( ini->value );
+				conf->dbport = atoi( g_strdup( ini->value ) );
 			}
 			else if( g_strcasecmp( ini->key, "dbuser" ) == 0 )
 			{
