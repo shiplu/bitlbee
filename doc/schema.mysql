@@ -1,4 +1,12 @@
-ALTER SCHEMA `bitlbee_data`  DEFAULT CHARACTER SET utf8  DEFAULT COLLATE utf8_general_ci;
+-- Creating database
+CREATE SCHEMA IF NOT EXISTS `:database`  DEFAULT CHARACTER SET utf8  DEFAULT COLLATE utf8_general_ci;
+
+-- Create user
+-- Change this password here
+GRANT ALL PRIVILEGES ON `:database`.* to ':user'@':host' identified by ':password';
+
+
+USE :database;
 
 -- Drop all the tables;
 DROP TABLE IF EXISTS `channel_settings`;
@@ -17,13 +25,6 @@ CREATE TABLE `users` (
   UNIQUE KEY `id_UNIQUE` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-
-DROP TABLE IF EXISTS `channel_settings`;
-DROP TABLE IF EXISTS `channels`;
-DROP TABLE IF EXISTS `account_buddies`;
-DROP TABLE IF EXISTS `account_settings`;
-DROP TABLE IF EXISTS `accounts`;
-DROP TABLE IF EXISTS `user_settings`;
 CREATE TABLE `user_settings` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user` int(11) NOT NULL,

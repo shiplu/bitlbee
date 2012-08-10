@@ -1,0 +1,48 @@
+
+function showhelp () {
+	printf "Syntax: \t%s DBNAME USER PASS [HOST]\n\n" $(basename $0)
+	printf "DBNAME\tDatabase name\n"
+	printf "USER\tUsername of the database user\n"
+	printf "PASS\tPassword against Username\n"
+	printf "HOST\tHost of the user from where connection originates\n"
+	exit;
+}
+
+NAME=""
+USER=""
+PASS=""
+HOST=""
+
+if [ "a" = "a$1" ]; then 
+	echo "database name not provided" 1>&2
+	showhelp
+elif [ "a" = "a$2" ]; then 
+	echo "user not provided" 1>&2
+	showhelp
+elif [ "a" = "a$3" ]; then 
+	echo "password not provided" 1>&2
+	showhelp
+fi
+
+NAME=$1
+USER=$2
+PASS=$3
+
+if [ "a" = "a$4" ]; then 
+	HOST=localhost
+else
+	HOST=$4
+fi
+
+# load mysql
+sql=$(cat schema.mysql)
+sql=${sql//:database/$NAME}
+sql=${sql//:user/$USER}
+sql=${sql//:password/$PASS}
+sql=${sql//:host/$HOST}
+
+
+# echoing final sql
+printf "%s\r\n" "$sql"
+
+
