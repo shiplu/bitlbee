@@ -554,6 +554,7 @@ static storage_status_t mysql_storage_check_pass( const char *nick, const char *
     GString *query = g_string_new("");
     
     /// building query
+    /// @todo use a salt for password to increase security
     g_string_append(query, "SELECT id, nick, password, sha1('");
     append_mysql_escaped_param(query, to, g_password);
     g_string_append(query, "') from users where nick='");
