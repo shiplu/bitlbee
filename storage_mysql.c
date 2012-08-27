@@ -95,12 +95,20 @@ MYSQL *mysql = NULL;
  * A wrapper for mysql query. 
  */
 static int send_query(MYSQL *mysql, const char *query, unsigned long len){
-    int return_value = mysql_real_query(mysql, query, len);
-    unsigned int m_errno = mysql_errno(mysql);
-    char *info = mysql_info(mysql);
+    int return_value = 0, ping = 0; 
+    unsigned int m_errno = 0;
+    char *info = NULL;
     
-    fprintf(stderr, "QUERY\t%s\n", query);
-    fprintf(stderr, "\tLength: %03lu  Errno: %u %s\n", len, m_errno, ((info==NULL)? "":info));
+    
+    // checks if mysql is timed out
+    ping = mysql_ping(mysql);
+    
+    return_value = mysql_real_query(mysql, query, len);
+    m_errno = mysql_errno(mysql);
+    info = mysql_info(mysql);
+    
+    
+    //fprintf(stderr, "\tLength: %03lu  Errno: %u %s\n", len, m_errno, ((info==NULL)? "":info));
     if(m_errno!=0)
 	fprintf(stderr, "\e[31mERROR\t%s\e[0m\n", mysql_error(mysql));
     
@@ -165,7 +173,7 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     row = row->next;
     type = g_strdup(((GString *)row->data)->str);
 
-    fprintf(stderr, "\tCurrent Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
+    //fprintf(stderr, "\tCurrent Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
     
     if( !name || !type ){
         fprintf(stderr, "\e[31mERROR\tMissing values for channels. channel: %s type: %s\e[0m\n", name, type);
@@ -296,7 +304,7 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
     else if( !prpl )
         fprintf(stderr, "\e[31mERROR\tUnknown protocol: %s\e[0m\n", protocol );
     else{
-	fprintf(stderr, "\e[31mERROR\tload/password: ['%s']\e[0m\n", password);
+	//fprintf(stderr, "\e[31mERROR\tload/password: ['%s']\e[0m\n", password);
         acc = account_add(irc->b, prpl, handle, password );
         if( server )
             set_setstr( &acc->set, "server", server );
@@ -359,7 +367,7 @@ static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query){
 
     num_rows = mysql_num_rows(result);
 
-    fprintf(stderr, "\t%Ld row%s found\n", num_rows, ((num_rows==1)? "": "s"));
+    //fprintf(stderr, "\t%Ld row%s found\n", num_rows, ((num_rows==1)? "": "s"));
     
     if(num_rows>0){
 	int i=0;
@@ -457,6 +465,8 @@ static storage_status_t set_settings_flag(MYSQL *mysql, set_t *settings, char * 
 
 static void mysql_storage_init( void ) {
     mysql = mysql_init(NULL);
+    my_bool reconnect = 1;
+    mysql_options(mysql,MYSQL_OPT_RECONNECT, &reconnect);
     if (mysql == NULL) {
         fprintf(stderr, "\e[31mERROR\tCan not initialize MySQL. Configuration won't be saved.\e[0m\n");
     }
@@ -464,6 +474,9 @@ static void mysql_storage_init( void ) {
 	fprintf(stderr, "\e[31mERROR\t%s\nConfiguration won't be saved.\e[0m\n", mysql_error(mysql));
     }
 
+    // for some older version mysql_real_connect resets the reconnect option. So I set it again
+    mysql_options(mysql,MYSQL_OPT_RECONNECT, &reconnect);
+    
     if (mysql_select_db(mysql, global.conf->dbname)) {
         fprintf(stderr, "\e[31mERROR\t%s\nConfiguration won't be saved.\e[0m\n", mysql_error(mysql));
     }
