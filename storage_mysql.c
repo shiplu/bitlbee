@@ -742,7 +742,6 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	if(server_exists){
 	    g_string_free(acc_server, TRUE);
 	}
-	fprintf(stderr, "\e[31mERROR\tsave/password: ['%s']\e[0m\n", acc_password->str);
 	send_query(mysql, q->str, q->len);
 	num_rows =  mysql_affected_rows(mysql);
 	if(num_rows<0 || num_rows>2){
