@@ -99,7 +99,6 @@ static int send_query(MYSQL *mysql, const char *query, unsigned long len){
     unsigned int m_errno = 0;
     char *info = NULL;
     
-    
     // checks if mysql is timed out
     ping = mysql_ping(mysql);
     
@@ -107,8 +106,6 @@ static int send_query(MYSQL *mysql, const char *query, unsigned long len){
     m_errno = mysql_errno(mysql);
     info = mysql_info(mysql);
     
-    
-    //fprintf(stderr, "\tLength: %03lu  Errno: %u %s\n", len, m_errno, ((info==NULL)? "":info));
     if(m_errno!=0)
 	fprintf(stderr, "\e[31mERROR\t%s\e[0m\n", mysql_error(mysql));
     
@@ -173,8 +170,6 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     row = row->next;
     type = g_strdup(((GString *)row->data)->str);
 
-    //fprintf(stderr, "\tCurrent Channel: channel_id=%ld, user_id=%ld, name=%s, type=%s\n", channel_id, user_id,  name, type);
-    
     if( !name || !type ){
         fprintf(stderr, "\e[31mERROR\tMissing values for channels. channel: %s type: %s\e[0m\n", name, type);
 	g_free(name);
@@ -185,8 +180,8 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
     /// 4.2 Create/find a channel and assign
     channel = irc_channel_by_name( irc, name );
     if(!channel){
-	fprintf(stderr, "\tNo IRC channel found. Creating one with name%s\n", name);
-	channel =  irc_channel_new( irc, name );
+		fprintf(stderr, "\tNo IRC channel found. Creating one with name%s\n", name);
+		channel =  irc_channel_new( irc, name );
     }
     
     if(channel){
@@ -194,10 +189,10 @@ static void mysql_storage_load_channels(gpointer data, gpointer user_data){
 	/// I just followed storage_xml.c
         set_setstr( &channel->set, "type", type );
     }else{
-	g_free(name);
-	g_free(type);
-	fprintf(stderr, "\e[31mERROR\tLast channel creation was not successfull\e[0m\n");
-	return;
+		g_free(name);
+		g_free(type);
+		fprintf(stderr, "\e[31mERROR\tChannel creation was not successfull\e[0m\n");
+		return;
     }
     
     /// 4.3 get all the chanel setting and update 1 by 1
@@ -249,9 +244,6 @@ static void mysql_storage_load_account_settings(gpointer data, gpointer user_dat
     }
     set_setstr(&account->set, name, (char*) value );
     g_free(name);
-    
-    /// not sure whether bellow statement will be needed.
-    //name = NULL;
 }
 
 static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
@@ -268,16 +260,14 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
 
     /**
     * This is the sequence how data is read
-    * +-------------+
-    * | id          |
-    * | user        |
-    * | protocol    |
-    * | handle      |
-    * | password    |
-    * | autoconnect |
-    * | tag         |
-    * | server      |
-    * +-------------+
+    * - id          
+    * - user        
+    * - protocol    
+    * - handle      
+    * - password    
+    * - autoconnect 
+    * - tag         
+    * - server      
     */
     
     account_id = atol(((GString *)row->data)->str);
@@ -300,11 +290,10 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
         prpl = find_protocol( protocol );
 
     if( !handle || !password|| !protocol )
-        fprintf(stderr, "\e[31mERROR\tMissing values for account\e[0m\n");
+        fprintf(stderr, "\e[31mERROR\tMissing values for account [id=%ld]\e[0m\n", account_id);
     else if( !prpl )
         fprintf(stderr, "\e[31mERROR\tUnknown protocol: %s\e[0m\n", protocol );
     else{
-	//fprintf(stderr, "\e[31mERROR\tload/password: ['%s']\e[0m\n", password);
         acc = account_add(irc->b, prpl, handle, password );
         if( server )
             set_setstr( &acc->set, "server", server );
@@ -313,7 +302,6 @@ static void mysql_storage_load_accounts(gpointer data, gpointer user_data){
         if( tag )
             set_setstr( &acc->set, "tag", tag );
     }
-    //g_free( password );
     
     /// 3.2 Get all the settings 1 by 1
     qry = g_string_new("SELECT name, value from account_settings where account=");
@@ -353,22 +341,20 @@ static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query){
     int query_status = send_query(mysql_handle, q->str, q->len);
 
     if(query_status!=0){
-	g_string_free(q, TRUE);
-	return NULL;
+		g_string_free(q, TRUE);
+		return NULL;
     }
     
     result = mysql_store_result(mysql_handle);
     
     if(result==NULL){
-	/// it was not a query that returns statemnet (e.g. INSERT, DELETE)
-	g_string_free(q, TRUE);
-	return NULL;
+		/// it was not a query that returns statemnet (e.g. INSERT, DELETE)
+		g_string_free(q, TRUE);
+		return NULL;
     }
 
     num_rows = mysql_num_rows(result);
 
-    //fprintf(stderr, "\t%Ld row%s found\n", num_rows, ((num_rows==1)? "": "s"));
-    
     if(num_rows>0){
 	int i=0;
 	for(i=0;i<num_rows; i++){
@@ -379,9 +365,9 @@ static GList * mysql_multiple_rows(MYSQL *mysql_handle, char* query){
 	/// to get the correct order.
 	rows = g_list_reverse(rows);
     }else{
-	mysql_free_result(result);
-	g_string_free(q, TRUE);
-	return NULL;
+		mysql_free_result(result);
+		g_string_free(q, TRUE);
+		return NULL;
     }
     
     /// clean up
@@ -690,9 +676,10 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 
     /// 3. Set all the user accounts
     /// 3.0. But first delete all the accounts
-    g_string_printf(q, "DELETE FROM accounts WHERE `user` = '%lu'", user_id);
+	/// Following two lines are not necessary as we are using on duplicate clause
+    // g_string_printf(q, "DELETE FROM accounts WHERE `user` = '%lu'", user_id);
     
-    send_query(mysql, q->str, q->len);
+    // send_query(mysql, q->str, q->len);
     
     for( acc = irc->b->accounts; acc; acc = acc->next ){
 	//acc->prpl->name, acc->user, pass_b64, acc->auto_connect, acc->tag
@@ -805,8 +792,9 @@ static storage_status_t mysql_storage_save( irc_t *irc, int overwrite ) {
 	GString *ch_type = g_string_new("");
 	
 	/// 4.0 But first delete all the existing channels
-	g_string_printf(q, "DELETE FROM channels WHERE `user` = '%lu'", user_id);
-	send_query(mysql, q->str, q->len);
+	/// We are using on duplicate key clause, Delete is not needed
+	//g_string_printf(q, "DELETE FROM channels WHERE `user` = '%lu'", user_id);
+	//send_query(mysql, q->str, q->len);
 	
 	for(l = irc->channels; l; l = l->next )
 	{
